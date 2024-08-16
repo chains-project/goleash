@@ -1,4 +1,4 @@
-# goleash
+# GoLeash <img src="logo.jpg" width="45" height="30" alt="Logo" style="vertical-align: middle;"> 
 Runtime enforcement of software supply chain capabilities in Go
 
 # Runnable example
