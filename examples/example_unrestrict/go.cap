@@ -12,21 +12,5 @@
         ]
     },
     "hashes": {
-        "CAPABILITY_FILES": [
-            "6e07213dc3a0a47c",
-            "ba3eb33074f84c18",
-            "01d0756d3ea1593a",
-            "76cb651f3fac1626",
-            "fde15d02fe61fd2e",
-            "89fbd8acaafbfd25",
-            "0d3c0a5780398386",
-            "ae80213718f5d9ee",
-            "1ae06b9bca82bf6b",
-            "0905297671a95af5"
-        ],
-        "CAPABILITY_NETWORK": [
-            "746ea7a6c1e5c82f",
-            "af42598ed7986bc9"
-        ]
     }
 }

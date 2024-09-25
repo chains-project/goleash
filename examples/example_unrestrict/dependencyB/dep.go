@@ -54,7 +54,8 @@ func TestWriteFile() {
 }
 
 func TestReadFile() {
-	_, err := os.ReadFile("./example1.txt")
+	data := []byte("Hello, World!")
+	err := os.WriteFile("./example1.txt", data, 0644)
 	if err != nil {
 		fmt.Printf("error reading file")
 	}
