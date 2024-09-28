@@ -44,21 +44,6 @@ cd track_syscalls
 make
 ```
 
-## Running the Experiment
-To execute the experiment and track syscalls for a specific binary:
-
-1. Run the following command with root privileges:
-```bash
-sudo ./hello_ebpf -binary /path/to/the/binary/to/track
-```
-
-Replace `/path/to/the/binary/to/track` with the actual path to the binary you want to monitor.
-
-2. The program will start tracking syscalls for the specified binary. You'll see output in the terminal showing the syscalls, process IDs, and stack traces.
-
-3. To stop the tracking, press Ctrl+C.
-
-
 ## Testing with CoreDNS
 
 To demonstrate the syscall tracking capabilities, we'll use CoreDNS as an example.
