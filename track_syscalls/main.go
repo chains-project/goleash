@@ -5,6 +5,7 @@ import (
 	"debug/elf"
 	"encoding/binary"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -26,46 +27,6 @@ const (
 	tracepoint    = "raw_syscalls:sys_enter"
 	maxStackDepth = 20
 )
-
-/*
-var symbolCache = make(map[uint64]string)
-var symbolCacheMutex sync.RWMutex
-
-func resolveSymbols(stackTrace []uint64) string {
-	var result strings.Builder
-	for _, addr := range stackTrace {
-		symbol := resolveSymbol(addr)
-		result.WriteString(fmt.Sprintf("%s\n", symbol))
-	}
-	return result.String()
-}
-
-func resolveSymbol(addr uint64) string {
-	symbolCacheMutex.RLock()
-	if symbol, ok := symbolCache[addr]; ok {
-		symbolCacheMutex.RUnlock()
-		return symbol
-	}
-	symbolCacheMutex.RUnlock()
-
-	cmd := exec.Command("addr2line", "-e", "/home/carmine/projects/workspace_gocap/coredns/coredns", fmt.Sprintf("%x", addr))
-	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Sprintf("0x%x", addr)
-	}
-
-	symbol := strings.TrimSpace(string(output))
-	if symbol == "?? ??" {
-		symbol = fmt.Sprintf("0x%x", addr)
-	}
-
-	symbolCacheMutex.Lock()
-	symbolCache[addr] = symbol
-	symbolCacheMutex.Unlock()
-
-	return symbol
-}
-*/
 
 type symbolInfo struct {
 	name  string
@@ -147,8 +108,17 @@ func main() {
 	log.SetPrefix("hello_ebpf: ")
 	log.SetFlags(log.Ltime)
 
+	// Add a flag for the binary path
+	binaryPath := flag.String("binary", "", "Path to the binary for syscall tracking")
+	flag.Parse()
+
+	// Check if the binary path is provided
+	if *binaryPath == "" {
+		log.Fatal("Please provide a binary path using the -binary flag")
+	}
+
 	// Populate symbol cache
-	if err := populateSymbolCache("/home/carmine/projects/workspace_gocap/coredns/coredns"); err != nil {
+	if err := populateSymbolCache(*binaryPath); err != nil {
 		log.Fatalf("populating symbol cache: %v", err)
 	}
 
