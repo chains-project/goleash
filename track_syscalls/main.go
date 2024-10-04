@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"debug/elf"
 	"encoding/binary"
 	"errors"
 	"flag"
@@ -10,11 +9,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sort"
-	"strings"
 	"syscall"
 
-	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
@@ -28,6 +24,10 @@ const (
 	maxStackDepth = 20
 )
 
+type Allowlist struct {
+	Dependencies map[string][]int `json:"dependencies"`
+}
+
 type symbolInfo struct {
 	name  string
 	start uint64
@@ -36,102 +36,28 @@ type symbolInfo struct {
 
 var symbolCache []symbolInfo
 
-func populateSymbolCache(binaryPath string) error {
-	f, err := elf.Open(binaryPath)
-	if err != nil {
-		return fmt.Errorf("opening binary: %w", err)
-	}
-	defer f.Close()
-
-	symbols, err := f.Symbols()
-	if err != nil {
-		return fmt.Errorf("reading symbols: %w", err)
-	}
-
-	for _, sym := range symbols {
-		if sym.Value != 0 && sym.Size != 0 {
-			symbolCache = append(symbolCache, symbolInfo{
-				name:  sym.Name,
-				start: sym.Value,
-				end:   sym.Value + sym.Size,
-			})
-		}
-	}
-
-	sort.Slice(symbolCache, func(i, j int) bool {
-		return symbolCache[i].start < symbolCache[j].start
-	})
-
-	return nil
-}
-
-func resolveSymbols(stackTrace []uint64) string {
-	var result strings.Builder
-	for _, addr := range stackTrace {
-		symbol := resolveSymbol(addr)
-		result.WriteString(fmt.Sprintf("%s\n", symbol))
-	}
-	return result.String()
-}
-
-func resolveSymbol(addr uint64) string {
-	idx := sort.Search(len(symbolCache), func(i int) bool {
-		return symbolCache[i].start > addr
-	}) - 1
-
-	if idx >= 0 && addr >= symbolCache[idx].start && addr < symbolCache[idx].end {
-		return symbolCache[idx].name
-	}
-
-	return fmt.Sprintf("0x%x", addr)
-}
-
-func getStackTrace(stackMap *ebpf.Map, stackID uint32) ([]uint64, error) {
-	var stackTrace [maxStackDepth]uint64
-	err := stackMap.Lookup(stackID, &stackTrace)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []uint64
-	for _, addr := range stackTrace {
-		if addr == 0 {
-			break
-		}
-		result = append(result, addr)
-	}
-
-	return result, nil
-}
-
-func isGoPackageFunction(symbol string) bool {
-	return strings.Contains(symbol, "github.com/")
-}
-
-func getFirstGoPackageFunction(stackTrace []uint64) string {
-	for _, addr := range stackTrace {
-		symbol := resolveSymbol(addr)
-		if isGoPackageFunction(symbol) {
-			return symbol
-		}
-	}
-	return ""
-}
-
 func main() {
-	log.SetPrefix("hello_ebpf: ")
+
 	log.SetFlags(log.Ltime)
 
 	// Add a flag for the binary path
 	binaryPath := flag.String("binary", "", "Path to the binary for syscall tracking")
+	allowlistPath := flag.String("allowlist", "allowlist.json", "Path to the allowlist JSON file")
 	flag.Parse()
 
 	// Check if the binary path is provided
 	if *binaryPath == "" {
 		log.Fatal("Please provide a binary path using the -binary flag")
 	}
+	if *allowlistPath == "" {
+		log.Fatal("Please provide a path to the allowlist JSON file using the -allowlist flag")
+	}
+	allowlist, err := loadAllowlist(*allowlistPath)
+	if err != nil {
+		log.Fatalf("loading allowlist: %v", err)
+	}
 
-	// Populate symbol cache
+	// Populate function symbols cache from the binary
 	if err := populateSymbolCache(*binaryPath); err != nil {
 		log.Fatalf("populating symbol cache: %v", err)
 	}
@@ -145,7 +71,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Load pre-compiled programs and maps into the kernel.
+	// Load pre-compiled eBPF program and maps into the kernel.
 	objs := ebpfObjects{}
 	if err := loadEbpfObjects(&objs, nil); err != nil {
 		log.Fatalf("loading objects: %v", err)
@@ -200,15 +126,20 @@ func main() {
 
 		// Process stack trace
 		stackTrace, err := getStackTrace(objs.Stacktraces, event.StackId)
+		callerPackage := getCallerPackage(stackTrace)
 		resolvedStackTrace := resolveSymbols(stackTrace)
 		firstGoFunc := getFirstGoPackageFunction(stackTrace)
 
-		if firstGoFunc != "" {
-			log.Printf("Getting stack trace...")
-			log.Printf("syscall: %d\tpid: %d\tcomm: %s\nStack Trace:\n%s\n",
-				event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]), resolvedStackTrace)
-			log.Printf("Go caller function: %s", firstGoFunc)
-			log.Printf("Go caller package: %s.%s", strings.Split(firstGoFunc, ".")[0], strings.Split(firstGoFunc, ".")[1])
+		fmt.Printf("\n")
+		log.Printf("Invoked syscall: %d\tpid: %d\tcomm: %s\n",
+			event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]))
+		log.Printf("Stack Trace:\n%s", resolvedStackTrace)
+		log.Printf("Go caller function: %s", firstGoFunc)
+		log.Printf("Go caller package: %s", callerPackage)
+
+		if !isSyscallAllowed(callerPackage, int(event.Syscall), allowlist) {
+			log.Printf("Unauthorized syscall %d from package %s", event.Syscall, callerPackage)
+			// crash the application
 		}
 	}
 }

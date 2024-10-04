@@ -62,10 +62,11 @@ This script will build CoreDNS and start it with a default configuration.
 1. In a new terminal window, navigate back to the `track_syscalls` folder.
 2. Run the syscall tracker (with root privileges), pointing it to the CoreDNS binary:
 ```bash
-sudo ./hello_ebpf -binary /path/to/the/binary/to/track
+sudo ./bpf_loader -binary /binary_path -allowlist /allowlist_path
 ```
 
-Replace `/path/to/the/binary/to/track` with the actual path to the binary you want to monitor.
+Replace `/binary_path` with the actual path to the binary you want to monitor.
+Replace `/allowlist_path` with the actual path to the allowlist.
 
 3. The program will start tracking syscalls for the specified binary. You'll see output in the termi>
 
@@ -85,7 +86,7 @@ To generate some DNS activity and observe the syscalls:
 
 This script will send a DNS query to the running CoreDNS instance.
 
-3. Observe the syscall tracking output in the terminal where you ran `hello_ebpf`.
+3. Observe the syscall tracking output in the terminal where you ran `bpf_loader`.
 
 You should now see the syscalls triggered by CoreDNS in response to the DNS query, allowing you to analyze its behavior at the system call level.
 
