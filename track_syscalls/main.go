@@ -21,7 +21,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event ebpf hello_ebpf.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event ebpf bpf_program.c
 
 const (
 	tracepoint    = "raw_syscalls:sys_enter"
@@ -102,6 +102,20 @@ func getStackTrace(stackMap *ebpf.Map, stackID uint32) ([]uint64, error) {
 	}
 
 	return result, nil
+}
+
+func isGoPackageFunction(symbol string) bool {
+	return strings.Contains(symbol, "github.com/")
+}
+
+func getFirstGoPackageFunction(stackTrace []uint64) string {
+	for _, addr := range stackTrace {
+		symbol := resolveSymbol(addr)
+		if isGoPackageFunction(symbol) {
+			return symbol
+		}
+	}
+	return ""
 }
 
 func main() {
@@ -186,14 +200,15 @@ func main() {
 
 		// Process stack trace
 		stackTrace, err := getStackTrace(objs.Stacktraces, event.StackId)
-		if err != nil {
-			log.Printf("getting stack trace: %s", err)
-		}
-
 		resolvedStackTrace := resolveSymbols(stackTrace)
+		firstGoFunc := getFirstGoPackageFunction(stackTrace)
 
-		log.Printf("syscall: %d\tpid: %d\tcomm: %s\nStack Trace:\n%s\n",
-			event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]), resolvedStackTrace)
-
+		if firstGoFunc != "" {
+			log.Printf("Getting stack trace...")
+			log.Printf("syscall: %d\tpid: %d\tcomm: %s\nStack Trace:\n%s\n",
+				event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]), resolvedStackTrace)
+			log.Printf("Go caller function: %s", firstGoFunc)
+			log.Printf("Go caller package: %s.%s", strings.Split(firstGoFunc, ".")[0], strings.Split(firstGoFunc, ".")[1])
+		}
 	}
 }

@@ -1,12 +1,12 @@
 .PHONY: all clean
 
-all: hello_ebpf
+all: bpf_loader
 
-hello_ebpf: main.go
+bpf_loader: main.go
 	go generate
-	go build -o hello_ebpf
+	go build -o bpf_loader
 
 clean:
-	rm -f hello_ebpf
+	rm -f bpf_loader
 	rm -r *.o
 	rm ebpf_*
