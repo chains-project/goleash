@@ -9,7 +9,18 @@ import (
 	"strings"
 
 	"github.com/cilium/ebpf"
+	"github.com/google/capslock/proto"
 )
+
+func mapSysCallNumberToCapability(syscall int) proto.Capability {
+	switch syscall {
+	case 1, 2, 3, 4:
+		return proto.Capability_CAPABILITY_FILES
+	case 39:
+		return proto.Capability_CAPABILITY_READ_SYSTEM_STATE
+	}
+	return proto.Capability_CAPABILITY_UNSPECIFIED
+}
 
 func loadAllowlist(filename string) (Allowlist, error) {
 	data, err := ioutil.ReadFile(filename)
@@ -127,7 +138,7 @@ func isSyscallAllowed(pkg string, syscall int, allowlist Allowlist) bool {
 		return false
 	}
 	for _, s := range allowed {
-		if s == syscall {
+		if mapSysCallNumberToCapability(s) == mapSysCallNumberToCapability(syscall) {
 			return true
 		}
 	}
