@@ -71,10 +71,6 @@ int trace_syscall(struct trace_event_raw_sys_enter *ctx) {
         return false;
 	}
 
-	if (ctx->id != 39) {
-		return 0;
-	}
-
 	// Allocate space in the ring buffer for the event
     struct event *e;
 	e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
