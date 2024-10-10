@@ -1,9 +1,9 @@
 package stackanalyzer
 
 import (
-	"main/binanalyzer"
 	"strings"
 
+	"github.com/chains-project/goleash/track_syscalls/binanalyzer"
 	"github.com/cilium/ebpf"
 )
 
