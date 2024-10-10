@@ -1,135 +1,111 @@
 package main
 
 import (
-	"debug/elf"
-	"encoding/json"
+	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
-	"io/ioutil"
-	"sort"
-	"strings"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/cilium/ebpf"
+	"github.com/chains-project/goleash/track_syscalls/binanalyzer"
+	"github.com/chains-project/goleash/track_syscalls/stackanalyzer"
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/ringbuf"
+	"github.com/cilium/ebpf/rlimit"
+	"golang.org/x/sys/unix"
 )
 
-func loadAllowlist(filename string) (Allowlist, error) {
-	data, err := ioutil.ReadFile(filename)
+func logEvent(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+	resolvedStackTrace := stackanalyzer.ResolveSymbols(stackTrace)
+	firstGoFunc := stackanalyzer.GetFirstGoPackageFunction(stackTrace)
+	callerPackage := stackanalyzer.GetCallerPackage(stackTrace)
+
+	fmt.Printf("\n")
+	log.Printf("Invoked syscall: %d\tpid: %d\tcomm: %s\n",
+		event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]))
+	log.Printf("Stack Trace:\n%s", resolvedStackTrace)
+	log.Printf("Go caller function: %s", firstGoFunc)
+	log.Printf("Go caller package: %s", callerPackage)
+}
+
+func loadEBPF() (*ebpfObjects, *ringbuf.Reader, *link.Link, error) {
+	// Allow the current process to lock memory for eBPF resources.
+	if err := rlimit.RemoveMemlock(); err != nil {
+		return nil, nil, nil, fmt.Errorf("removing memlock: %w", err)
+	}
+
+	// Load pre-compiled eBPF program and maps into the kernel.
+	objs := ebpfObjects{}
+	if err := loadEbpfObjects(&objs, nil); err != nil {
+		return nil, nil, nil, fmt.Errorf("loading objects: %w", err)
+	}
+
+	// Open a tracepoint and attach the pre-compiled program.
+	tp, err := link.Tracepoint("raw_syscalls", "sys_enter", objs.TraceSyscall, nil)
 	if err != nil {
-		return Allowlist{}, fmt.Errorf("reading allowlist file: %w", err)
+		objs.Close()
+		return nil, nil, nil, fmt.Errorf("opening tracepoint: %w", err)
 	}
 
-	var allowlist Allowlist
-	if err := json.Unmarshal(data, &allowlist); err != nil {
-		return Allowlist{}, fmt.Errorf("parsing allowlist JSON: %w", err)
-	}
-
-	return allowlist, nil
-}
-
-func populateSymbolCache(binaryPath string) error {
-	f, err := elf.Open(binaryPath)
+	// Open a ringbuf reader from userspace RINGBUF map described in the eBPF C program.
+	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
-		return fmt.Errorf("opening binary: %w", err)
+		tp.Close()
+		objs.Close()
+		return nil, nil, nil, fmt.Errorf("opening ringbuf reader: %w", err)
 	}
-	defer f.Close()
 
-	symbols, err := f.Symbols()
+	return &objs, rd, &tp, nil
+}
+
+func setupAndRun(binaryPath string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
+	if err := binanalyzer.Populate(binaryPath); err != nil {
+		log.Fatalf("Populating symbol cache: %v", err)
+	}
+
+	objs, rd, tp, err := loadEBPF()
 	if err != nil {
-		return fmt.Errorf("reading symbols: %w", err)
+		log.Fatalf("Setting up eBPF: %v", err)
 	}
+	defer objs.Close()
+	defer rd.Close()
+	defer (*tp).Close()
 
-	for _, sym := range symbols {
-		if sym.Value != 0 && sym.Size != 0 {
-			symbolCache = append(symbolCache, symbolInfo{
-				name:  sym.Name,
-				start: sym.Value,
-				end:   sym.Value + sym.Size,
-			})
-		}
-	}
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
 
-	sort.Slice(symbolCache, func(i, j int) bool {
-		return symbolCache[i].start < symbolCache[j].start
-	})
+	log.Println("Tracking syscalls...")
 
-	return nil
-}
+	go func() {
+		var event ebpfEvent
+		for {
+			select {
+			case <-stopChan:
+				log.Println("Received signal, stopping syscall tracking...")
+				return
+			default:
+				record, err := rd.Read()
+				if err != nil {
+					if errors.Is(err, ringbuf.ErrClosed) {
+						return
+					}
+					log.Printf("Reading from reader: %s", err)
+					continue
+				}
 
-func resolveSymbols(stackTrace []uint64) string {
-	var result strings.Builder
-	for _, addr := range stackTrace {
-		symbol := resolveSymbol(addr)
-		result.WriteString(fmt.Sprintf("%s\n", symbol))
-	}
-	return result.String()
-}
+				if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
+					log.Printf("Parsing ringbuf event: %s", err)
+					continue
+				}
 
-func resolveSymbol(addr uint64) string {
-	idx := sort.Search(len(symbolCache), func(i int) bool {
-		return symbolCache[i].start > addr
-	}) - 1
-
-	if idx >= 0 && addr >= symbolCache[idx].start && addr < symbolCache[idx].end {
-		return symbolCache[idx].name
-	}
-
-	return fmt.Sprintf("0x%x", addr)
-}
-
-func getStackTrace(stackMap *ebpf.Map, stackID uint32) ([]uint64, error) {
-	var stackTrace [maxStackDepth]uint64
-	err := stackMap.Lookup(stackID, &stackTrace)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []uint64
-	for _, addr := range stackTrace {
-		if addr == 0 {
-			break
-		}
-		result = append(result, addr)
-	}
-
-	return result, nil
-}
-
-func isGoPackageFunction(symbol string) bool {
-	return strings.Contains(symbol, "github.com/")
-}
-
-func getFirstGoPackageFunction(stackTrace []uint64) string {
-	for _, addr := range stackTrace {
-		symbol := resolveSymbol(addr)
-		if isGoPackageFunction(symbol) {
-			return symbol
-		}
-	}
-	return ""
-}
-
-func getCallerPackage(stackTrace []uint64) string {
-	for _, addr := range stackTrace {
-		symbol := resolveSymbol(addr)
-		if isGoPackageFunction(symbol) {
-			parts := strings.Split(symbol, ".")
-			if len(parts) >= 2 {
-				return strings.Join(parts[:2], ".")
+				stackTrace, _ := stackanalyzer.GetStackTrace(objs.Stacktraces, event.StackId)
+				processEvent(event, stackTrace, objs)
 			}
-			return parts[0]
 		}
-	}
-	return ""
-}
+	}()
 
-func isSyscallAllowed(pkg string, syscall int, allowlist Allowlist) bool {
-	allowed, ok := allowlist.Dependencies[pkg]
-	if !ok {
-		return false
-	}
-	for _, s := range allowed {
-		if s == syscall {
-			return true
-		}
-	}
-	return false
+	<-stopChan
 }

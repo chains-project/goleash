@@ -23,6 +23,7 @@ func runMain() {
 
 	fmt.Println("\nCalling dependencyC (invoke NETWORK)")
 	dependencyC.CallPDF()
+
 }
 
 func benchmark() []time.Duration {
