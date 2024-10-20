@@ -18,10 +18,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func logEvent(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+func logEvent(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects, args Args) {
 	resolvedStackTrace := stackanalyzer.ResolveSymbols(stackTrace)
 	firstGoFunc := stackanalyzer.GetFirstGoPackageFunction(stackTrace)
-	callerPackage := stackanalyzer.GetCallerPackage(stackTrace)
+	callerPackage := stackanalyzer.GetCallerPackage(stackTrace, args.ModManifest)
 
 	fmt.Printf("\n")
 	log.Printf("Invoked syscall: %d\tpid: %d\tcomm: %s\n",

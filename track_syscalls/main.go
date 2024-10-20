@@ -33,6 +33,10 @@ func main() {
 		log.Fatal("Please provide a binary path using the -binary flag")
 	}
 
+	if args.ModManifest == "" {
+		log.Fatal("Please provide a go.mod manifest file path using the -mod-manifest flag. This is required to determine the caller package of a syscall.")
+	}
+
 	switch args.Mode {
 	case "build":
 		runBuildMode(args)
@@ -56,7 +60,7 @@ func runBuildMode(args Args) {
 			}
 			syscalls[callerPackage][int(event.Syscall)] = true
 		}
-		logEvent(event, stackTrace, objs)
+		logEvent(event, stackTrace, objs, args)
 	})
 
 	// Convert syscalls map to the format expected by syscallfilter.Write
@@ -71,7 +75,7 @@ func runBuildMode(args Args) {
 func runTraceMode(args Args) {
 	setupAndRun(args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
 		// Just log the event
-		logEvent(event, stackTrace, objs)
+		logEvent(event, stackTrace, objs, args)
 	})
 	log.Println("Trace mode completed.")
 }
@@ -90,7 +94,7 @@ func runEnforceMode(args Args) {
 
 	setupAndRun(args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
 		callerPackage := stackanalyzer.GetCallerPackage(stackTrace, args.ModManifest)
-		logEvent(event, stackTrace, objs)
+		logEvent(event, stackTrace, objs, args)
 		if callerPackage != "" && !allowlist.SyscallAllowed(callerPackage, int(event.Syscall)) {
 			log.Printf("Unauthorized syscall %d from package %s", event.Syscall, callerPackage)
 			fmt.Fprintf(f, "Unauthorized syscall %d from package %s\n", event.Syscall, callerPackage)

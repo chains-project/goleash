@@ -1,6 +1,7 @@
 package stackanalyzer
 
 import (
+	"os"
 	"strings"
 
 	"github.com/chains-project/goleash/track_syscalls/binanalyzer"
@@ -37,19 +38,23 @@ func ResolveSymbols(stackTrace []uint64) string {
 	return strings.Join(resolved, "\n")
 }
 
-func isGoPackageFunction(symbol string) bool {
-	return strings.Contains(symbol, "github.com/")
+func isGoPackageFunction(symbol string, modManifest string) bool {
+	// check inside go.mod manifest
+	content, err := os.ReadFile(modManifest)
+	if err == nil {
+		return strings.Contains(string(content), symbol)
+	} else {
+		println("Error reading go.mod manifest file")
+	}
+	return false
 }
 
-func GetCallerPackage(stackTrace []uint64) string {
+func GetCallerPackage(stackTrace []uint64, modManifest string) string {
 	for _, addr := range stackTrace {
 		symbol := binanalyzer.Resolve(addr)
-		if isGoPackageFunction(symbol) {
-			parts := strings.Split(symbol, ".")
-			if len(parts) >= 2 {
-				return strings.Join(parts[:2], ".")
-			}
-			return parts[0]
+		if isGoPackageFunction(symbol, modManifest) {
+			println("Symbol", symbol)
+			return symbol
 		}
 	}
 	return ""
