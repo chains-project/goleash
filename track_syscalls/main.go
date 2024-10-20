@@ -13,34 +13,43 @@ import (
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event ebpf backend.c
 
+type Args struct {
+	BinaryPath  string
+	Mode        string
+	ModManifest string
+}
+
 func main() {
 	log.SetFlags(log.Ltime)
 
-	binaryPath := flag.String("binary", "", "Path to the binary for syscall tracking")
-	mode := flag.String("mode", "enforce", "Execution mode: 'build', 'enforce' or 'trace'")
+	var args Args
+	flag.StringVar(&args.BinaryPath, "binary", "", "Path to the binary for syscall tracking")
+	flag.StringVar(&args.Mode, "mode", "enforce", "Execution mode: 'build', 'enforce' or 'trace'")
+	flag.StringVar(&args.ModManifest, "mod-manifest", "", "Path to the go.mod manifest file")
+
 	flag.Parse()
 
-	if *binaryPath == "" {
+	if args.BinaryPath == "" {
 		log.Fatal("Please provide a binary path using the -binary flag")
 	}
 
-	switch *mode {
+	switch args.Mode {
 	case "build":
-		runBuildMode(*binaryPath)
+		runBuildMode(args)
 	case "enforce":
-		runEnforceMode(*binaryPath)
+		runEnforceMode(args)
 	case "trace":
-		runTraceMode(*binaryPath)
+		runTraceMode(args)
 	default:
-		log.Fatalf("Invalid mode: %s. Use 'build', 'enforce' or 'trace'", *mode)
+		log.Fatalf("Invalid mode: %s. Use 'build', 'enforce' or 'trace'", args.Mode)
 	}
 
 }
 
-func runBuildMode(binaryPath string) {
+func runBuildMode(args Args) {
 	syscalls := make(map[string]map[int]bool)
-	setupAndRun(binaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
-		callerPackage := stackanalyzer.GetCallerPackage(stackTrace)
+	setupAndRun(args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+		callerPackage := stackanalyzer.GetCallerPackage(stackTrace, args.ModManifest)
 		if callerPackage != "" {
 			if _, ok := syscalls[callerPackage]; !ok {
 				syscalls[callerPackage] = make(map[int]bool)
@@ -59,15 +68,15 @@ func runBuildMode(binaryPath string) {
 	log.Println("Build mode completed. Allowlist JSON file created.")
 }
 
-func runTraceMode(binaryPath string) {
-	setupAndRun(binaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+func runTraceMode(args Args) {
+	setupAndRun(args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
 		// Just log the event
 		logEvent(event, stackTrace, objs)
 	})
 	log.Println("Trace mode completed.")
 }
 
-func runEnforceMode(binaryPath string) {
+func runEnforceMode(args Args) {
 	allowlist, err := syscallfilter.Load()
 	if err != nil {
 		log.Fatalf("loading allowlist: %v", err)
@@ -79,8 +88,8 @@ func runEnforceMode(binaryPath string) {
 	}
 	defer f.Close()
 
-	setupAndRun(binaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
-		callerPackage := stackanalyzer.GetCallerPackage(stackTrace)
+	setupAndRun(args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+		callerPackage := stackanalyzer.GetCallerPackage(stackTrace, args.ModManifest)
 		logEvent(event, stackTrace, objs)
 		if callerPackage != "" && !allowlist.SyscallAllowed(callerPackage, int(event.Syscall)) {
 			log.Printf("Unauthorized syscall %d from package %s", event.Syscall, callerPackage)
