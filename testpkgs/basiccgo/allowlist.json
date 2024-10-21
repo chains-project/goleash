@@ -1,0 +1,127 @@
+{
+	"capabilityInfo": [
+		{
+			"packageName": "main",
+			"capability": "CAPABILITY_CGO",
+			"depPath": "basiccgo._Cfunc_hello basiccgo._cgo_runtime_cgocall",
+			"path": [
+				{
+					"name": "basiccgo._Cfunc_hello",
+					"package": "basiccgo"
+				},
+				{
+					"name": "basiccgo._cgo_runtime_cgocall",
+					"site": {
+						"filename": "f10b4070b502d7684090a6d9f32ec9c1307256f41ebf4461bda4f97eeac5473f-d",
+						"line": "43",
+						"column": "22"
+					},
+					"package": "basiccgo"
+				}
+			],
+			"packageDir": "basiccgo",
+			"capabilityType": "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName": "main",
+			"capability": "CAPABILITY_CGO",
+			"depPath": "basiccgo._Cgo_no_callback",
+			"path": [
+				{
+					"name": "basiccgo._Cgo_no_callback",
+					"package": "basiccgo"
+				}
+			],
+			"packageDir": "basiccgo",
+			"capabilityType": "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName": "main",
+			"capability": "CAPABILITY_CGO",
+			"depPath": "basiccgo._Cgo_use",
+			"path": [
+				{
+					"name": "basiccgo._Cgo_use",
+					"package": "basiccgo"
+				}
+			],
+			"packageDir": "basiccgo",
+			"capabilityType": "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName": "main",
+			"capability": "CAPABILITY_CGO",
+			"depPath": "basiccgo._cgoCheckPointer",
+			"path": [
+				{
+					"name": "basiccgo._cgoCheckPointer",
+					"package": "basiccgo"
+				}
+			],
+			"packageDir": "basiccgo",
+			"capabilityType": "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName": "main",
+			"capability": "CAPABILITY_CGO",
+			"depPath": "basiccgo._cgoCheckResult",
+			"path": [
+				{
+					"name": "basiccgo._cgoCheckResult",
+					"package": "basiccgo"
+				}
+			],
+			"packageDir": "basiccgo",
+			"capabilityType": "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName": "main",
+			"capability": "CAPABILITY_CGO",
+			"depPath": "basiccgo._cgo_runtime_cgocall",
+			"path": [
+				{
+					"name": "basiccgo._cgo_runtime_cgocall",
+					"package": "basiccgo"
+				}
+			],
+			"packageDir": "basiccgo",
+			"capabilityType": "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName": "main",
+			"capability": "CAPABILITY_CGO",
+			"depPath": "basiccgo.main basiccgo._Cfunc_hello basiccgo._cgo_runtime_cgocall",
+			"path": [
+				{
+					"name": "basiccgo.main",
+					"package": "basiccgo"
+				},
+				{
+					"name": "basiccgo._Cfunc_hello",
+					"site": {
+						"filename": "main.go",
+						"line": "8",
+						"column": "9"
+					},
+					"package": "basiccgo"
+				},
+				{
+					"name": "basiccgo._cgo_runtime_cgocall",
+					"site": {
+						"filename": "f10b4070b502d7684090a6d9f32ec9c1307256f41ebf4461bda4f97eeac5473f-d",
+						"line": "43",
+						"column": "22"
+					},
+					"package": "basiccgo"
+				}
+			],
+			"packageDir": "basiccgo",
+			"capabilityType": "CAPABILITY_TYPE_DIRECT"
+		}
+	],
+	"packageInfo": [
+		{
+			"path": "basiccgo"
+		}
+	]
+}
