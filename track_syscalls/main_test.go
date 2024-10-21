@@ -52,7 +52,7 @@ func TestBuild(t *testing.T) {
 
 	StopTracer(tracer)
 
-	var expectedSubstring string = "Go caller package: main"
+	var expectedSubstring string = "Go caller function: executeMaliciousCGO"
 	var actualOutput string = outputBuffer.String()
 
 	if !strings.Contains(actualOutput, expectedSubstring) {

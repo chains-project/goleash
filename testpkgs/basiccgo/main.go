@@ -4,6 +4,9 @@ package main
 import "C"
 
 func main() {
-	// run a simple c program
+	executeMaliciousCGO()
+}
+
+func executeMaliciousCGO() {
 	C.hello()
 }
