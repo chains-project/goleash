@@ -17,7 +17,7 @@ jobs:
           go-version: '1.23.2'
 
       - name: Build track_syscalls
-        run: >
+        run: |
           apt install llvm-strip
           (cd track_syscalls && make all)
 
