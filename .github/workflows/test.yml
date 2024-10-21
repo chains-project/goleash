@@ -18,7 +18,7 @@ jobs:
 
       - name: Build track_syscalls
         run: |
-          sudo apt-get install llvm-strip
+          sudo apt-get install binutils
           (cd track_syscalls && make all)
 
       - name: Build test packages
