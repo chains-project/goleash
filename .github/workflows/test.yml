@@ -17,10 +17,12 @@ jobs:
           go-version: '1.23.2'
 
       - name: Build track_syscalls
-        run: cd track_syscalls && make all
+        run: >
+          apt install llvm-strip
+          (cd track_syscalls && make all)
 
       - name: Build test packages
-        run: cd testpkgs && make build
+        run: (cd testpkgs && make build)
 
       - name: Run tests
-        run: cd track_syscalls && sudo go test
+        run: (cd track_syscalls && sudo go test)
