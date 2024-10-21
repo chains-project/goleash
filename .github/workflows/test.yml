@@ -18,7 +18,8 @@ jobs:
 
       - name: Build track_syscalls
         run: |
-          sudo apt-get install llvm
+          sudo apt-get -y install llvm
+          sudo apt-get -y install bcc-tools
           (cd track_syscalls && make all)
 
       - name: Build test packages
