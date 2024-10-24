@@ -52,10 +52,15 @@ func TestBuild(t *testing.T) {
 
 	StopTracer(tracer)
 
-	var expectedSubstring string = "Go caller function: executeMaliciousCGO"
-	var actualOutput string = outputBuffer.String()
+	var expectedCallerFunction = "Go caller function: ExecuteMaliciousCGO"
+	var expectedCallerPackage = "Go caller package: example.com/filereader"
+	var actualOutput = outputBuffer.String()
 
-	if !strings.Contains(actualOutput, expectedSubstring) {
-		t.Errorf("Expected output to contain %s, got %s", expectedSubstring, actualOutput)
+	if !strings.Contains(actualOutput, expectedCallerFunction) {
+		t.Errorf("Expected output to contain %s, got %s", expectedCallerFunction, actualOutput)
+	}
+
+	if !strings.Contains(actualOutput, expectedCallerPackage) {
+		t.Errorf("Expected output to contain %s, got %s", expectedCallerPackage, actualOutput)
 	}
 }

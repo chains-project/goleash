@@ -1,12 +1,7 @@
 package main
 
-// #include "hello.h"
-import "C"
+import "example.com/filereader"
 
 func main() {
-	executeMaliciousCGO()
-}
-
-func executeMaliciousCGO() {
-	C.hello()
+	filereader.ExecuteMaliciousCGO()
 }

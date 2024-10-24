@@ -53,7 +53,6 @@ func GetCallerPackage(stackTrace []uint64, modManifest string) string {
 	for _, addr := range stackTrace {
 		symbol := binanalyzer.Resolve(addr)
 		if isGoPackageFunction(symbol, modManifest) {
-			println("Symbol", symbol)
 			return symbol
 		}
 	}
