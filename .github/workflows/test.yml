@@ -22,7 +22,7 @@ jobs:
           (cd track_syscalls && make all)
 
       - name: Build test packages
-        run: (cd testpkgs && make all)
+        run: (cd testpkgs/basiccgo && make all)
 
       - name: Run tests
         run: (cd track_syscalls && sudo go test)
