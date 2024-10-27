@@ -18,17 +18,21 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func logEvent(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects, args Args) {
+func logEvent(event ebpfEvent, stackTrace []uint64) {
 	resolvedStackTrace := stackanalyzer.ResolveSymbols(stackTrace)
-	firstGoFunc := stackanalyzer.GetFirstGoPackageFunction(stackTrace)
-	callerPackage := stackanalyzer.GetCallerPackage(stackTrace, args.ModManifest)
+	callerPackage, callerFunction, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
+	if err != nil {
+		log.Printf("Error getting caller package: %v", err)
+		return
+	}
 
 	fmt.Printf("\n")
 	log.Printf("Invoked syscall: %d\tpid: %d\tcomm: %s\n",
 		event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]))
 	log.Printf("Stack Trace:\n%s", resolvedStackTrace)
-	log.Printf("Go caller function: %s", firstGoFunc)
 	log.Printf("Go caller package: %s", callerPackage)
+	log.Printf("Go caller function: %s", callerFunction)
+
 }
 
 func loadEBPF() (*ebpfObjects, *ringbuf.Reader, *link.Link, error) {
@@ -61,9 +65,14 @@ func loadEBPF() (*ebpfObjects, *ringbuf.Reader, *link.Link, error) {
 	return &objs, rd, &tp, nil
 }
 
-func setupAndRun(binaryPath string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
-	if err := binanalyzer.Populate(binaryPath); err != nil {
+func setupAndRun(binaryPath string, modManifestPath string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
+	if err := binanalyzer.LoadBinarySymbolsCache(binaryPath); err != nil {
 		log.Fatalf("Populating symbol cache: %v", err)
+	}
+
+	// Load module cache
+	if err := stackanalyzer.LoadModuleCache(modManifestPath); err != nil {
+		log.Fatalf("Loading module cache: %v", err)
 	}
 
 	objs, rd, tp, err := loadEBPF()

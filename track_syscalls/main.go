@@ -52,15 +52,19 @@ func main() {
 
 func runBuildMode(args Args) {
 	syscalls := make(map[string]map[int]bool)
-	setupAndRun(args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
-		callerPackage := stackanalyzer.GetCallerPackage(stackTrace, args.ModManifest)
+	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+		callerPackage, _, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
+		if err != nil {
+			log.Printf("Error getting caller package: %v", err)
+			return
+		}
 		if callerPackage != "" {
 			if _, ok := syscalls[callerPackage]; !ok {
 				syscalls[callerPackage] = make(map[int]bool)
 			}
 			syscalls[callerPackage][int(event.Syscall)] = true
 		}
-		logEvent(event, stackTrace, objs, args)
+		logEvent(event, stackTrace)
 	})
 
 	// Convert syscalls map to the format expected by syscallfilter.Write
@@ -73,9 +77,9 @@ func runBuildMode(args Args) {
 }
 
 func runTraceMode(args Args) {
-	setupAndRun(args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
 		// Just log the event
-		logEvent(event, stackTrace, objs, args)
+		logEvent(event, stackTrace)
 	})
 	log.Println("Trace mode completed.")
 }
@@ -92,9 +96,13 @@ func runEnforceMode(args Args) {
 	}
 	defer f.Close()
 
-	setupAndRun(args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
-		callerPackage := stackanalyzer.GetCallerPackage(stackTrace, args.ModManifest)
-		logEvent(event, stackTrace, objs, args)
+	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+		callerPackage, _, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
+		if err != nil {
+			log.Printf("Error getting caller package: %v", err)
+			return
+		}
+		logEvent(event, stackTrace)
 		if callerPackage != "" && !allowlist.SyscallAllowed(callerPackage, int(event.Syscall)) {
 			log.Printf("Unauthorized syscall %d from package %s", event.Syscall, callerPackage)
 			fmt.Fprintf(f, "Unauthorized syscall %d from package %s\n", event.Syscall, callerPackage)
