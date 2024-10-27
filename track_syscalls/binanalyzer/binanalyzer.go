@@ -11,9 +11,9 @@ type SymbolInfo struct {
 	End   uint64
 }
 
-var Cache []SymbolInfo
+var BinarySymbolsCache []SymbolInfo
 
-func Populate(binaryPath string) error {
+func LoadBinarySymbolsCache(binaryPath string) error {
 	f, err := elf.Open(binaryPath)
 	if err != nil {
 		return err
@@ -27,7 +27,7 @@ func Populate(binaryPath string) error {
 
 	for _, sym := range symbols {
 		if sym.Value != 0 {
-			Cache = append(Cache, SymbolInfo{
+			BinarySymbolsCache = append(BinarySymbolsCache, SymbolInfo{
 				Name:  sym.Name,
 				Start: sym.Value,
 				End:   sym.Value + sym.Size,
@@ -38,7 +38,7 @@ func Populate(binaryPath string) error {
 }
 
 func Resolve(address uint64) string {
-	for _, sym := range Cache {
+	for _, sym := range BinarySymbolsCache {
 		if address >= sym.Start && address < sym.End {
 			return sym.Name
 		}
