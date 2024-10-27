@@ -1,6 +1,8 @@
 package main
 
-import "example.com/filereader"
+import (
+	"example.com/filereader"
+)
 
 func main() {
 	filereader.ExecuteMaliciousCGO()
