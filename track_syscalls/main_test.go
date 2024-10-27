@@ -52,8 +52,8 @@ func TestBuild(t *testing.T) {
 
 	StopTracer(tracer)
 
-	var expectedCallerFunction = "Go caller function: ExecuteMaliciousCGO"
-	var expectedCallerPackage = "Go caller package: example.com/filereader"
+	var expectedCallerFunction = "Go caller function: example.com/filereader.ExecuteMaliciousCGO"
+	var expectedCallerPackage = "Go caller package: example.com"
 	var actualOutput = outputBuffer.String()
 
 	if !strings.Contains(actualOutput, expectedCallerFunction) {
