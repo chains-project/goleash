@@ -53,7 +53,7 @@ func main() {
 func runBuildMode(args Args) {
 	syscalls := make(map[string]map[int]bool)
 	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
-		callerPackage, _, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
+		callerPackage, _, err := stackanalyzer.ResolveCallerAndPackageNameFromStackTrace(stackTrace)
 		if err != nil {
 			log.Printf("Error getting caller package: %v", err)
 			return
@@ -97,7 +97,7 @@ func runEnforceMode(args Args) {
 	defer f.Close()
 
 	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
-		callerPackage, _, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
+		callerPackage, _, err := stackanalyzer.ResolveCallerAndPackageNameFromStackTrace(stackTrace)
 		if err != nil {
 			log.Printf("Error getting caller package: %v", err)
 			return

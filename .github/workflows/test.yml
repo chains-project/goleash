@@ -26,4 +26,4 @@ jobs:
         run: (cd testpkgs/basiccgo && make all)
 
       - name: Run tests
-        run: (cd track_syscalls && sudo go test)
+        run: (cd track_syscalls && sudo go test ./...)

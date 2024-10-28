@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"log"
 	"os"
 	"os/signal"
@@ -15,14 +16,12 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
-	"golang.org/x/sys/unix"
 )
 
 func logEvent(event ebpfEvent, stackTrace []uint64) {
 	resolvedStackTrace := stackanalyzer.ResolveSymbols(stackTrace)
-	callerPackage, callerFunction, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
+	callerPackage, callerFunction, err := stackanalyzer.ResolveCallerAndPackageNameFromStackTrace(stackTrace)
 	if err != nil {
-		log.Printf("Error getting caller package: %v", err)
 		return
 	}
 
