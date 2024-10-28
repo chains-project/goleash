@@ -1,145 +1,113 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"syscall"
 
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/ringbuf"
-	"github.com/cilium/ebpf/rlimit"
-	"golang.org/x/sys/unix"
+	"github.com/chains-project/goleash/track_syscalls/stackanalyzer"
+	"github.com/chains-project/goleash/track_syscalls/syscallfilter"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event ebpf bpf_program.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event ebpf backend.c
 
-const (
-	tracepoint    = "raw_syscalls:sys_enter"
-	maxStackDepth = 20
-)
-
-type Allowlist struct {
-	Dependencies map[string][]int `json:"dependencies"`
+type Args struct {
+	BinaryPath  string
+	Mode        string
+	ModManifest string
 }
-
-type symbolInfo struct {
-	name  string
-	start uint64
-	end   uint64
-}
-
-var symbolCache []symbolInfo
 
 func main() {
-
 	log.SetFlags(log.Ltime)
 
-	// Add a flag for the binary path
-	binaryPath := flag.String("binary", "", "Path to the binary for syscall tracking")
-	allowlistPath := flag.String("allowlist", "allowlist.json", "Path to the allowlist JSON file")
+	var args Args
+	flag.StringVar(&args.BinaryPath, "binary", "", "Path to the binary for syscall tracking")
+	flag.StringVar(&args.Mode, "mode", "enforce", "Execution mode: 'build', 'enforce' or 'trace'")
+	flag.StringVar(&args.ModManifest, "mod-manifest", "", "Path to the go.mod manifest file")
+
 	flag.Parse()
 
-	// Check if the binary path is provided
-	if *binaryPath == "" {
+	if args.BinaryPath == "" {
 		log.Fatal("Please provide a binary path using the -binary flag")
 	}
-	if *allowlistPath == "" {
-		log.Fatal("Please provide a path to the allowlist JSON file using the -allowlist flag")
+
+	if args.ModManifest == "" {
+		log.Fatal("Please provide a go.mod manifest file path using the -mod-manifest flag. This is required to determine the caller package of a syscall.")
 	}
-	allowlist, err := loadAllowlist(*allowlistPath)
+
+	switch args.Mode {
+	case "build":
+		runBuildMode(args)
+	case "enforce":
+		runEnforceMode(args)
+	case "trace":
+		runTraceMode(args)
+	default:
+		log.Fatalf("Invalid mode: %s. Use 'build', 'enforce' or 'trace'", args.Mode)
+	}
+
+}
+
+func runBuildMode(args Args) {
+	syscalls := make(map[string]map[int]bool)
+	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+		callerPackage, _, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
+		if err != nil {
+			log.Printf("Error getting caller package: %v", err)
+			return
+		}
+		if callerPackage != "" {
+			if _, ok := syscalls[callerPackage]; !ok {
+				syscalls[callerPackage] = make(map[int]bool)
+			}
+			syscalls[callerPackage][int(event.Syscall)] = true
+		}
+		logEvent(event, stackTrace)
+	})
+
+	// Convert syscalls map to the format expected by syscallfilter.Write
+	convertedSyscalls := syscallfilter.ConvertSyscallsMap(syscalls)
+
+	if err := syscallfilter.Write(convertedSyscalls); err != nil {
+		log.Fatalf("Writing allowlist JSON: %v", err)
+	}
+	log.Println("Build mode completed. Allowlist JSON file created.")
+}
+
+func runTraceMode(args Args) {
+	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+		// Just log the event
+		logEvent(event, stackTrace)
+	})
+	log.Println("Trace mode completed.")
+}
+
+func runEnforceMode(args Args) {
+	allowlist, err := syscallfilter.Load()
 	if err != nil {
 		log.Fatalf("loading allowlist: %v", err)
 	}
 
-	// Populate function symbols cache from the binary
-	if err := populateSymbolCache(*binaryPath); err != nil {
-		log.Fatalf("populating symbol cache: %v", err)
-	}
-
-	// Subscribe to signals for terminating the program.
-	stopper := make(chan os.Signal, 1)
-	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
-
-	// Allow the current process to lock memory for eBPF resources.
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatal(err)
-	}
-
-	// Load pre-compiled eBPF program and maps into the kernel.
-	objs := ebpfObjects{}
-	if err := loadEbpfObjects(&objs, nil); err != nil {
-		log.Fatalf("loading objects: %v", err)
-	}
-	defer objs.Close()
-
-	// Open a tracepoint and attach the pre-compiled program.
-	tp, err := link.Tracepoint("raw_syscalls", "sys_enter", objs.TraceSyscall, nil)
+	f, err := os.Create("unauthorized.log")
 	if err != nil {
-		log.Fatalf("opening tracepoint: %s", err)
+		log.Fatalf("creating unauthorized.log: %v", err)
 	}
-	defer tp.Close()
+	defer f.Close()
 
-	// Open a ringbuf reader from userspace RINGBUF map described in the
-	// eBPF C program.
-	rd, err := ringbuf.NewReader(objs.Events)
-	if err != nil {
-		log.Fatalf("opening ringbuf reader: %s", err)
-	}
-	defer rd.Close()
-
-	// Close the reader when the process receives a signal, which will exit
-	// the read loop.
-	go func() {
-		<-stopper
-
-		if err := rd.Close(); err != nil {
-			log.Fatalf("closing ringbuf reader: %s", err)
-		}
-	}()
-
-	log.Println("Waiting for events..")
-
-	// bpfEvent is generated by bpf2go.
-	var event ebpfEvent
-	for {
-		record, err := rd.Read()
+	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+		callerPackage, _, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
 		if err != nil {
-			if errors.Is(err, ringbuf.ErrClosed) {
-				log.Println("Received signal, exiting..")
-				return
-			}
-			log.Printf("reading from reader: %s", err)
-			continue
+			log.Printf("Error getting caller package: %v", err)
+			return
 		}
-
-		// Parse the ringbuf event entry into a bpfEvent structure.
-		if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
-			log.Printf("parsing ringbuf event: %s", err)
-			continue
-		}
-
-		// Process stack trace
-		stackTrace, err := getStackTrace(objs.Stacktraces, event.StackId)
-		callerPackage := getCallerPackage(stackTrace)
-		resolvedStackTrace := resolveSymbols(stackTrace)
-		firstGoFunc := getFirstGoPackageFunction(stackTrace)
-
-		fmt.Printf("\n")
-		log.Printf("Invoked syscall: %d\tpid: %d\tcomm: %s\n",
-			event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]))
-		log.Printf("Stack Trace:\n%s", resolvedStackTrace)
-		log.Printf("Go caller function: %s", firstGoFunc)
-		log.Printf("Go caller package: %s", callerPackage)
-
-		if !isSyscallAllowed(callerPackage, int(event.Syscall), allowlist) {
+		logEvent(event, stackTrace)
+		if callerPackage != "" && !allowlist.SyscallAllowed(callerPackage, int(event.Syscall)) {
 			log.Printf("Unauthorized syscall %d from package %s", event.Syscall, callerPackage)
-			// crash the application
+			fmt.Fprintf(f, "Unauthorized syscall %d from package %s\n", event.Syscall, callerPackage)
+
+			syscall.Kill(int(event.Pid), syscall.SIGKILL)
 		}
-	}
+	})
 }

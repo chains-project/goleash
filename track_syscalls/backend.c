@@ -8,7 +8,7 @@
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
-static char target_comm[10] = "coredns";
+static char target_comm[10] = "basiccgo";
 
 struct event {
     u32 pid;
@@ -69,10 +69,6 @@ int trace_syscall(struct trace_event_raw_sys_enter *ctx) {
         }
     } else if (pid != *target_pid_ptr) {
         return false;
-	}
-
-	if (ctx->id != 39) {
-		return 0;
 	}
 
 	// Allocate space in the ring buffer for the event
