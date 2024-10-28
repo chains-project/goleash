@@ -18,6 +18,7 @@ type ImportedPackages struct {
 	packages []string
 }
 
+// ToDo: do not use global variables
 var ImportedPackagesCache *ImportedPackages
 
 func LoadModuleCache(modManifest string) error {
@@ -69,7 +70,7 @@ func ResolveSymbols(stackTrace []uint64) string {
 	return strings.Join(resolved, "\n")
 }
 
-func GetCallerPackageAndFunction(stackTrace []uint64) (string, string, error) {
+func ResolveCallerAndPackageNameFromStackTrace(stackTrace []uint64) (string, string, error) {
 
 	if ImportedPackagesCache == nil {
 		return "", "", fmt.Errorf("ImportedPackagesCache is not initialized")
@@ -83,11 +84,22 @@ func GetCallerPackageAndFunction(stackTrace []uint64) (string, string, error) {
 		symbol := binanalyzer.Resolve(addr)
 
 		// Check if the symbol contains an imported Go package
-		for _, pkgName := range ImportedPackagesCache.packages {
-			if strings.Contains(symbol, pkgName) {
-				funcName := strings.TrimPrefix(symbol, pkgName+".")
-				return pkgName, funcName, nil
-			}
+		pkgName, funcName, err := GetCallerPackageAndFunction(symbol)
+		if err != nil {
+			return "", "", err
+		}
+		if pkgName != "" && funcName != "" {
+			return pkgName, funcName, nil
+		}
+	}
+	return "", "", nil
+}
+
+func GetCallerPackageAndFunction(resolvedSymbol string) (string, string, error) {
+	for _, pkgName := range ImportedPackagesCache.packages {
+		if strings.Contains(resolvedSymbol, pkgName) {
+			funcName := strings.TrimPrefix(resolvedSymbol, pkgName+".")
+			return pkgName, funcName, nil
 		}
 	}
 	return "", "", nil
