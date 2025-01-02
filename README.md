@@ -48,47 +48,43 @@ make
 
 To demonstrate the syscall tracking capabilities, we'll use CoreDNS as an example.
 
-### Compiling and Running CoreDNS
+### Compiling CoreDNS
 
-1. Navigate to the CoreDNS folder. Compile and run CoreDNS using the provided script:
+1. Navigate to the CoreDNS folder and compile CoreDNS using the provided script:
 ```bash
-./build_and_run.sh
+./build.sh
+```
+This will generate the coreDNS binary to run later.
+
+### Generate an allowlist for the CoreDNS Syscalls
+
+2. Navigate back to the `track_syscalls` folder and run the syscall tracker (with root privileges), pointing it to the CoreDNS binary:
+```bash
+sudo ./bpf_loader -binary /binary_path -mod-manifest /go.mod -mode build
 ```
 
-This script will build CoreDNS and start it with a default configuration.
+Replace `/binary_path` and `/go.mod` with the actual path to the binary and go manifest of the application you want to monitor.
 
-### Tracking CoreDNS Syscalls
 
-1. In a new terminal window, navigate back to the `track_syscalls` folder.
-2. Run the syscall tracker (with root privileges), pointing it to the CoreDNS binary:
+### Start CoreDNS and send a test request
+3.  In a new terminal window run coreDNS
 ```bash
-sudo ./bpf_loader -binary /binary_path -allowlist /allowlist_path
+./coredns/run.sh
 ```
 
-Replace `/binary_path` with the actual path to the binary you want to monitor.
-Replace `/allowlist_path` with the actual path to the allowlist.
+CoreDNS will start with a default configuration.
 
-3. The program will start tracking syscalls for the specified binary. You'll see output in the termi>
+4. To trigger some operations to track, you can send a request to coreDNS
 
-4. To stop the tracking, press Ctrl+C.
-
-
-### Sending a Test Request to CoreDNS
-
-To generate some DNS activity and observe the syscalls:
-
-1. Open another terminal window.
-
-2. Execute the test request script:
 ```bash
 ./make_request.sh
 ```
 
 This script will send a DNS query to the running CoreDNS instance.
 
-3. Observe the syscall tracking output in the terminal where you ran `bpf_loader`.
+4. Observe the syscall tracking output in the terminal where you ran `bpf_loader`.
 
-You should now see the syscalls triggered by CoreDNS in response to the DNS query, allowing you to analyze its behavior at the system call level.
+You should now see the syscalls triggered by CoreDNS in response to the DNS query. Closing the tracker with CTRL+C, the allowlist will be saved. 
 
 
 
