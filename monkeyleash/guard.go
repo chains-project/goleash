@@ -1,4 +1,4 @@
-package monkeyleash
+package monkey
 
 import (
 	"encoding/hex"

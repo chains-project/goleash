@@ -1,4 +1,4 @@
-package monkey_leash
+package monkey
 
 import (
 	"fmt"
