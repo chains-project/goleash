@@ -9,7 +9,8 @@ import (
 	"github.com/chains-project/goleash/examples/example_restrict/dependencyA"
 	"github.com/chains-project/goleash/examples/example_restrict/dependencyB"
 	"github.com/chains-project/goleash/examples/example_restrict/dependencyC"
-	_ "github.com/chains-project/goleash/goleash"
+
+	_ "github.com/chains-project/goleash/monkeyleash"
 )
 
 const runs = 10000
