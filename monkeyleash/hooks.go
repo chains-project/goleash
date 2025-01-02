@@ -1,4 +1,4 @@
-package goleash
+package monkeyleash
 
 import (
 	"fmt"
