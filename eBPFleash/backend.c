@@ -8,7 +8,7 @@
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
-static char target_comm[10] = "coredns";
+static char target_comm[10] = "testCGO";
 
 struct event {
     u32 pid;
