@@ -1,26 +1,11 @@
 package syscallfilter
 
-import (
-	"encoding/json"
-	"os"
-	"sort"
-)
-
 const (
 	syscallsFile     = "syscalls.json"
 	capabilitiesFile = "capabilities.json"
 	filePermissions  = 0644
 )
 
-type SyscallAllowlist struct {
-	Dependencies map[string][]int `json:"dependencies"`
-}
-
-type CapabilityAllowlist struct {
-	Dependencies map[string][]string `json:"dependencies"`
-}
-
-// Predefined capability mappings
 var syscallToCapability = map[int]string{
 	0: "CAP_READ_FILE",  //	read
 	1: "CAP_WRITE_FILE", //	write
@@ -36,7 +21,7 @@ var syscallToCapability = map[int]string{
 	7: "CAP_FILE",      //	poll
 	8: "CAP_FILE",      //	lseek
 
-	//9: "CAP_READ_FILE", 			//	mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, offset)
+	9: "CAP_READ_FILE", //	mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, offset)
 	// : "CAP_WRITE_FILE", 			//	mmap(NULL, size, PROT_WRITE, MAP_SHARED, fd, offset)
 	// : "CAP_MEMORY_MANIPULATION", //	mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)
 
@@ -103,7 +88,7 @@ var syscallToCapability = map[int]string{
 	70: "CAP_MEMORY_MANIPULATION", //	msgrcv
 	71: "CAP_MEMORY_MANIPULATION", //	msgctl
 
-	//72: "CAP_READ_FILE" 			//	fcntl(fd, F_GETFD)
+	72: "CAP_READ_FILE", //	fcntl(fd, F_GETFD)
 	//	: "CAP_WRITE_FILE"			// 	fcntl(fd, F_SETFD, flag)
 
 	73:  "CAP_FILE_METADATA",       //	flock
@@ -291,7 +276,7 @@ var syscallToCapability = map[int]string{
 	255: "CAP_FILE_METADATA",       //	inotify_rm_watch
 	256: "CAP_MEMORY_MANIPULATION", //	migrate_pages
 
-	//257: "CAP_READ_FILE", 		//	openat(fd, "file", O_RDONLY)
+	257: "CAP_READ_FILE", //	openat(fd, "file", O_RDONLY)
 	//	 : "CAP_WRITE_FILE", 		//	openat(fd, "file", O_WRONLY)
 	//	 : "CAP_CREATE_FILE", 		//	openat(fd, "file", O_CREAT | O_WRONLY)
 
@@ -330,7 +315,7 @@ var syscallToCapability = map[int]string{
 	290: "CAP_MODIFY_SYSTEM_STATE", //	eventfd2
 	291: "CAP_MEMORY_MANIPULATION", //	epoll_create1
 
-	//292: "CAP_READ_FILE", 		//	dup3(fd, newfd, O_RDONLY)
+	292: "CAP_READ_FILE", //	dup3(fd, newfd, O_RDONLY)
 	//	 : "CAP_WRITE_FILE", 		//	dup3(fd, newfd, O_WRONLY)
 
 	293: "CAP_MEMORY_MANIPULATION", //	pipe2
@@ -345,7 +330,7 @@ var syscallToCapability = map[int]string{
 	302: "CAP_RESOURCE_LIMITS",     //	prlimit64
 	303: "CAP_READ_FILE",           //	name_to_handle_at
 
-	//304: "CAP_READ_FILE", 		//	open_by_handle_at(mnt_fd, handle, O_RDONLY)
+	304: "CAP_READ_FILE", //	open_by_handle_at(mnt_fd, handle, O_RDONLY)
 	//   : "CAP_WRITE_FILE", 		//	open_by_handle_at(mnt_fd, handle, O_WRONLY)
 
 	305: "CAP_MODIFY_SYSTEM_STATE", //	clock_adjtime
@@ -392,7 +377,7 @@ var syscallToCapability = map[int]string{
 	435: "CAP_EXEC",                //	clone3
 	436: "CAP_FILE",                //	close_range
 
-	//437: "CAP_READ_FILE", 		//	openat2(fd, "file", {flags=O_RDONLY})
+	437: "CAP_READ_FILE", //	openat2(fd, "file", {flags=O_RDONLY})
 	//	 : "CAP_WRITE_FILE", 		//	openat2(fd, "file", {flags=O_WRONLY})
 	//	 : "CAP_CREATE_FILE", 		//	openat2(fd, "file", {flags=O_WRONLY | O_CREAT})
 
@@ -416,148 +401,4 @@ var syscallToCapability = map[int]string{
 	455: "CAP_MEMORY_MANIPULATION", //	futex_wait
 	456: "CAP_MEMORY_MANIPULATION", //	futex_requeue
 
-}
-
-// File Operations
-func LoadSyscalls() (SyscallAllowlist, error) {
-	var allowlist SyscallAllowlist
-	jsonData, err := os.ReadFile(syscallsFile)
-	if err != nil {
-		return allowlist, err
-	}
-	return allowlist, json.Unmarshal(jsonData, &allowlist)
-}
-
-func LoadCapabilities() (CapabilityAllowlist, error) {
-	var allowlist CapabilityAllowlist
-	jsonData, err := os.ReadFile(capabilitiesFile)
-	if err != nil {
-		return allowlist, err
-	}
-	return allowlist, json.Unmarshal(jsonData, &allowlist)
-}
-
-func Write(newSyscalls map[string][]int) error {
-	allowlist := readOrCreateAllowlist()
-	mergeNewSyscalls(&allowlist, newSyscalls)
-	return writeAllowlist(allowlist)
-}
-
-// Helper functions
-func readOrCreateAllowlist() SyscallAllowlist {
-	var sysAllowlist SyscallAllowlist
-	data, err := os.ReadFile(syscallsFile)
-	if err == nil {
-		json.Unmarshal(data, &sysAllowlist)
-	}
-	if sysAllowlist.Dependencies == nil {
-		sysAllowlist.Dependencies = make(map[string][]int)
-	}
-	return sysAllowlist
-}
-
-func mergeNewSyscalls(allowlist *SyscallAllowlist, newSyscalls map[string][]int) {
-	for pkg, syscalls := range newSyscalls {
-		allowlist.Dependencies[pkg] = mergeSyscalls(allowlist.Dependencies[pkg], syscalls)
-	}
-}
-
-func writeAllowlist(allowlist SyscallAllowlist) error {
-	data, err := json.MarshalIndent(allowlist, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(syscallsFile, data, filePermissions)
-}
-
-func mergeSyscalls(existing, new []int) []int {
-	uniqueSyscalls := make(map[int]bool)
-	for _, syscall := range append(existing, new...) {
-		uniqueSyscalls[syscall] = true
-	}
-
-	result := make([]int, 0, len(uniqueSyscalls))
-	for syscall := range uniqueSyscalls {
-		result = append(result, syscall)
-	}
-	sort.Ints(result)
-	return result
-}
-
-// Capability handling
-func GenerateCapabilityMap(syscalls map[string][]int) CapabilityAllowlist {
-	capAllowlist := CapabilityAllowlist{Dependencies: make(map[string][]string)}
-
-	for pkg, syscallList := range syscalls {
-		capabilities := make(map[string]bool)
-		for _, syscall := range syscallList {
-			if cap, exists := syscallToCapability[syscall]; exists {
-				capabilities[cap] = true
-			}
-		}
-
-		capAllowlist.Dependencies[pkg] = mapToSortedSlice(capabilities)
-	}
-	return capAllowlist
-}
-
-func WriteCapabilities(capAllowlist CapabilityAllowlist) error {
-	data, err := json.MarshalIndent(capAllowlist, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(capabilitiesFile, data, filePermissions)
-}
-
-// Utility functions
-func (a *SyscallAllowlist) SyscallAllowed(callerPkg string, syscall int) bool {
-	allowed, exists := a.Dependencies[callerPkg]
-	if !exists {
-		return false
-	}
-	for _, s := range allowed {
-		if s == syscall {
-			return true
-		}
-	}
-	return false
-}
-
-func (a *CapabilityAllowlist) CapabilityAllowed(callerPkg string, capability string) bool {
-	allowed, exists := a.Dependencies[callerPkg]
-	if !exists {
-		return false
-	}
-	for _, cap := range allowed {
-		if cap == capability {
-			return true
-		}
-	}
-	return false
-}
-
-func GetCapabilityForSyscall(syscall int) (string, bool) {
-	cap, exists := syscallToCapability[syscall]
-	return cap, exists
-}
-
-func ConvertSyscallsMap(syscalls map[string]map[int]bool) map[string][]int {
-	result := make(map[string][]int)
-	for pkg, syscallMap := range syscalls {
-		syscallList := make([]int, 0, len(syscallMap))
-		for syscall := range syscallMap {
-			syscallList = append(syscallList, syscall)
-		}
-		result[pkg] = syscallList
-	}
-	return result
-}
-
-func mapToSortedSlice(m map[string]bool) []string {
-	result := make([]string, 0, len(m))
-	for key := range m {
-		result = append(result, key)
-	}
-	sort.Strings(result)
-	return result
 }

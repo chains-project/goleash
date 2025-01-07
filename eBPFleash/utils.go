@@ -29,10 +29,14 @@ func logEvent(event ebpfEvent, stackTrace []uint64) {
 	fmt.Printf("\n")
 	log.Printf("Invoked syscall: %d\tpid: %d\tcomm: %s\n",
 		event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]))
-	log.Printf("Stack Trace:\n%s", resolvedStackTrace)
-	log.Printf("Go caller package: %s", callerPackage)
-	log.Printf("Go caller function: %s", callerFunction)
 
+	if callerPackage != "" && callerFunction != "" {
+		log.Printf("Stack Trace:\n%s", resolvedStackTrace)
+		log.Printf("Go caller package: %s", callerPackage)
+		log.Printf("Go caller function: %s", callerFunction)
+	} else {
+		log.Printf("Go Runtime Invocation")
+	}
 }
 
 func loadEBPF() (*ebpfObjects, *ringbuf.Reader, *link.Link, error) {

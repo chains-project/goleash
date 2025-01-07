@@ -11,7 +11,7 @@ import (
 	"github.com/chains-project/goleash/eBPFleash/syscallfilter"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event ebpf backend.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event -cflags "-DTARGET_CMD='\"${TARGET_CMD}\"'" ebpf backend.c
 
 type Args struct {
 	BinaryPath  string

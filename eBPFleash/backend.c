@@ -3,12 +3,16 @@
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 
+#ifndef TARGET_CMD
+#define TARGET_CMD "default_comm"
+#endif
+
 #define TASK_COMM_SIZE 100
 #define MAX_STACK_DEPTH 20
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
-static char target_comm[10] = "testCGO";
+static char target_comm[10] = TARGET_CMD;
 
 struct event {
     u32 pid;
