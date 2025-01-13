@@ -6,91 +6,92 @@ const (
 	filePermissions  = 0644
 )
 
+//	: "CAP_WRITE_FILE", 		//	open("/path/to/file", O_WRONLY)
+//	: "CAP_CREATE_FILE", 		//	open("/path/to/file", O_CREAT | O_WRONLY)
+//  : "CAP_WRITE_FILE", 			//	mmap(NULL, size, PROT_WRITE, MAP_SHARED, fd, offset)
+//  : "CAP_MEMORY_MANIPULATION", //	mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)
+//	: "CAP_WRITE_FILE"			// 	fcntl(fd, F_SETFD, flag)
+//	: "CAP_WRITE_FILE", 		//	openat(fd, "file", O_WRONLY)
+//	: "CAP_CREATE_FILE", 		//	openat(fd, "file", O_CREAT | O_WRONLY)
+//	: "CAP_WRITE_FILE", 		//	dup3(fd, newfd, O_WRONLY)
+//  : "CAP_WRITE_FILE", 		//	open_by_handle_at(mnt_fd, handle, O_WRONLY)
+//	: "CAP_WRITE_FILE", 		//	openat2(fd, "file", {flags=O_WRONLY})
+//	: "CAP_CREATE_FILE", 		//	openat2(fd, "file", {flags=O_WRONLY | O_CREAT})
+
 var syscallToCapability = map[int]string{
-	0: "CAP_READ_FILE",  //	read
-	1: "CAP_WRITE_FILE", //	write
-
-	2: "CAP_READ_FILE", //	open("/path/to/file", O_RDONLY)
-	//	: "CAP_WRITE_FILE", 		//	open("/path/to/file", O_WRONLY)
-	//	: "CAP_CREATE_FILE", 		//	open("/path/to/file", O_CREAT | O_WRONLY)
-
-	3: "CAP_FILE",      //	close
-	4: "CAP_READ_FILE", //	stat
-	5: "CAP_READ_FILE", //	fstat
-	6: "CAP_READ_FILE", //	lstat
-	7: "CAP_FILE",      //	poll
-	8: "CAP_FILE",      //	lseek
-
-	9: "CAP_READ_FILE", //	mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, offset)
-	// : "CAP_WRITE_FILE", 			//	mmap(NULL, size, PROT_WRITE, MAP_SHARED, fd, offset)
-	// : "CAP_MEMORY_MANIPULATION", //	mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)
-
-	10: "CAP_MEMORY_MANIPULATION", //	mprotect
-	11: "CAP_MEMORY_MANIPULATION", //	munmap
-	12: "CAP_MEMORY_MANIPULATION", //	brk
-	13: "CAP_MODIFY_SYSTEM_STATE", //	rt_sigaction
-	14: "CAP_MODIFY_SYSTEM_STATE", //	rt_sigprocmask
-	15: "CAP_MODIFY_SYSTEM_STATE", //	rt_sigreturn
-	16: "CAP_DIRECT_IO",           //	ioctl
-	17: "CAP_READ_FILE",           //	pread64
-	18: "CAP_WRITE_FILE",          //	pwrite64
-	19: "CAP_READ_FILE",           //	readv
-	20: "CAP_WRITE_FILE",          //	writev
-	21: "CAP_READ_FILE",           //	access
-	22: "CAP_MEMORY_MANIPULATION", //	pipe
-	23: "CAP_FILE",                //	select
-	24: "CAP_MODIFY_SYSTEM_STATE", //	sched_yield
-	25: "CAP_MEMORY_MANIPULATION", //	mremap
-	26: "CAP_FILE",                //	msync
-	27: "CAP_MEMORY_MANIPULATION", //	mincore
-	28: "CAP_MEMORY_MANIPULATION", //	madvise
-	29: "CAP_MEMORY_MANIPULATION", //	shmget
-	30: "CAP_MEMORY_MANIPULATION", //	shmat
-	31: "CAP_MEMORY_MANIPULATION", //	shmctl
-	32: "CAP_FILE",                //	dup
-	33: "CAP_FILE",                //	dup2
-	34: "CAP_MODIFY_SYSTEM_STATE", //	pause
-	35: "CAP_MODIFY_SYSTEM_STATE", //	nanosleep
-	36: "CAP_READ_SYSTEM_STATE",   //	getitimer
-	37: "CAP_MODIFY_SYSTEM_STATE", //	alarm
-	38: "CAP_MODIFY_SYSTEM_STATE", //	setitimer
-	39: "CAP_READ_SYSTEM_STATE",   //	getpid
-	40: "CAP_FILE",                //	sendfile
-	41: "CAP_CONNECT_REMOTE",      //	socket
-	42: "CAP_CONNECT_REMOTE",      //	connect
-	43: "CAP_LISTEN_LOCAL",        //	accept
-	44: "CAP_SEND_DATA",           //	sendto
-	45: "CAP_RECEIVE_DATA",        //	recvfrom
-	46: "CAP_SEND_DATA",           //	sendmsg
-	47: "CAP_RECEIVE_DATA",        //	recvmsg
-	48: "CAP_LISTEN_LOCAL",        //	shutdown
-	49: "CAP_LISTEN_LOCAL",        //	bind
-	50: "CAP_LISTEN_LOCAL",        //	listen
-	51: "CAP_LISTEN_LOCAL",        //	getsockname
-	52: "CAP_CONNECT_REMOTE",      //	getpeername
-	53: "CAP_CONNECT_REMOTE",      //	socketpair
-	54: "CAP_CONNECT_REMOTE",      //	setsockopt
-	55: "CAP_CONNECT_REMOTE",      //	getsockopt
-	56: "CAP_EXEC",                //	clone
-	57: "CAP_EXEC",                //	fork
-	58: "CAP_EXEC",                //	vfork
-	59: "CAP_EXEC",                //	execve
-	60: "CAP_TERMINATE_PROCESS",   //	exit
-	61: "CAP_TERMINATE_PROCESS",   //	wait4
-	62: "CAP_TERMINATE_PROCESS",   //	kill
-	63: "CAP_READ_SYSTEM_STATE",   //	uname
-	64: "CAP_MEMORY_MANIPULATION", //	semget
-	65: "CAP_MEMORY_MANIPULATION", //	semop
-	66: "CAP_MEMORY_MANIPULATION", //	semctl
-	67: "CAP_MEMORY_MANIPULATION", //	shmdt
-	68: "CAP_MEMORY_MANIPULATION", //	msgget
-	69: "CAP_MEMORY_MANIPULATION", //	msgsnd
-	70: "CAP_MEMORY_MANIPULATION", //	msgrcv
-	71: "CAP_MEMORY_MANIPULATION", //	msgctl
-
-	72: "CAP_READ_FILE", //	fcntl(fd, F_GETFD)
-	//	: "CAP_WRITE_FILE"			// 	fcntl(fd, F_SETFD, flag)
-
+	0:   "CAP_READ_FILE",           //	read
+	1:   "CAP_WRITE_FILE",          //	write
+	2:   "CAP_READ_FILE",           //	open("/path/to/file", O_RDONLY)
+	3:   "CAP_FILE",                //	close
+	4:   "CAP_READ_FILE",           //	stat
+	5:   "CAP_READ_FILE",           //	fstat
+	6:   "CAP_READ_FILE",           //	lstat
+	7:   "CAP_FILE",                //	poll
+	8:   "CAP_FILE",                //	lseek
+	9:   "CAP_READ_FILE",           //	mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, offset)
+	10:  "CAP_MEMORY_MANIPULATION", //	mprotect
+	11:  "CAP_MEMORY_MANIPULATION", //	munmap
+	12:  "CAP_MEMORY_MANIPULATION", //	brk
+	13:  "CAP_MODIFY_SYSTEM_STATE", //	rt_sigaction
+	14:  "CAP_MODIFY_SYSTEM_STATE", //	rt_sigprocmask
+	15:  "CAP_MODIFY_SYSTEM_STATE", //	rt_sigreturn
+	16:  "CAP_DIRECT_IO",           //	ioctl
+	17:  "CAP_READ_FILE",           //	pread64
+	18:  "CAP_WRITE_FILE",          //	pwrite64
+	19:  "CAP_READ_FILE",           //	readv
+	20:  "CAP_WRITE_FILE",          //	writev
+	21:  "CAP_READ_FILE",           //	access
+	22:  "CAP_MEMORY_MANIPULATION", //	pipe
+	23:  "CAP_FILE",                //	select
+	24:  "CAP_MODIFY_SYSTEM_STATE", //	sched_yield
+	25:  "CAP_MEMORY_MANIPULATION", //	mremap
+	26:  "CAP_FILE",                //	msync
+	27:  "CAP_MEMORY_MANIPULATION", //	mincore
+	28:  "CAP_MEMORY_MANIPULATION", //	madvise
+	29:  "CAP_MEMORY_MANIPULATION", //	shmget
+	30:  "CAP_MEMORY_MANIPULATION", //	shmat
+	31:  "CAP_MEMORY_MANIPULATION", //	shmctl
+	32:  "CAP_FILE",                //	dup
+	33:  "CAP_FILE",                //	dup2
+	34:  "CAP_MODIFY_SYSTEM_STATE", //	pause
+	35:  "CAP_MODIFY_SYSTEM_STATE", //	nanosleep
+	36:  "CAP_READ_SYSTEM_STATE",   //	getitimer
+	37:  "CAP_MODIFY_SYSTEM_STATE", //	alarm
+	38:  "CAP_MODIFY_SYSTEM_STATE", //	setitimer
+	39:  "CAP_READ_SYSTEM_STATE",   //	getpid
+	40:  "CAP_FILE",                //	sendfile
+	41:  "CAP_CONNECT_REMOTE",      //	socket
+	42:  "CAP_CONNECT_REMOTE",      //	connect
+	43:  "CAP_LISTEN_LOCAL",        //	accept
+	44:  "CAP_SEND_DATA",           //	sendto
+	45:  "CAP_RECEIVE_DATA",        //	recvfrom
+	46:  "CAP_SEND_DATA",           //	sendmsg
+	47:  "CAP_RECEIVE_DATA",        //	recvmsg
+	48:  "CAP_LISTEN_LOCAL",        //	shutdown
+	49:  "CAP_LISTEN_LOCAL",        //	bind
+	50:  "CAP_LISTEN_LOCAL",        //	listen
+	51:  "CAP_LISTEN_LOCAL",        //	getsockname
+	52:  "CAP_CONNECT_REMOTE",      //	getpeername
+	53:  "CAP_CONNECT_REMOTE",      //	socketpair
+	54:  "CAP_CONNECT_REMOTE",      //	setsockopt
+	55:  "CAP_CONNECT_REMOTE",      //	getsockopt
+	56:  "CAP_EXEC",                //	clone
+	57:  "CAP_EXEC",                //	fork
+	58:  "CAP_EXEC",                //	vfork
+	59:  "CAP_EXEC",                //	execve
+	60:  "CAP_TERMINATE_PROCESS",   //	exit
+	61:  "CAP_TERMINATE_PROCESS",   //	wait4
+	62:  "CAP_TERMINATE_PROCESS",   //	kill
+	63:  "CAP_READ_SYSTEM_STATE",   //	uname
+	64:  "CAP_MEMORY_MANIPULATION", //	semget
+	65:  "CAP_MEMORY_MANIPULATION", //	semop
+	66:  "CAP_MEMORY_MANIPULATION", //	semctl
+	67:  "CAP_MEMORY_MANIPULATION", //	shmdt
+	68:  "CAP_MEMORY_MANIPULATION", //	msgget
+	69:  "CAP_MEMORY_MANIPULATION", //	msgsnd
+	70:  "CAP_MEMORY_MANIPULATION", //	msgrcv
+	71:  "CAP_MEMORY_MANIPULATION", //	msgctl
+	72:  "CAP_READ_FILE",           //	fcntl(fd, F_GETFD)
 	73:  "CAP_FILE_METADATA",       //	flock
 	74:  "CAP_WRITE_FILE",          //	fsync
 	75:  "CAP_WRITE_FILE",          //	fdatasync
@@ -275,11 +276,7 @@ var syscallToCapability = map[int]string{
 	254: "CAP_FILE_METADATA",       //	inotify_add_watch
 	255: "CAP_FILE_METADATA",       //	inotify_rm_watch
 	256: "CAP_MEMORY_MANIPULATION", //	migrate_pages
-
-	257: "CAP_READ_FILE", //	openat(fd, "file", O_RDONLY)
-	//	 : "CAP_WRITE_FILE", 		//	openat(fd, "file", O_WRONLY)
-	//	 : "CAP_CREATE_FILE", 		//	openat(fd, "file", O_CREAT | O_WRONLY)
-
+	257: "CAP_READ_FILE",           //	openat(fd, "file", O_RDONLY)
 	258: "CAP_CREATE_FILE",         //	mkdirat
 	259: "CAP_CREATE_FILE",         //	mknodat
 	260: "CAP_FILE_METADATA",       //	fchownat
@@ -314,10 +311,7 @@ var syscallToCapability = map[int]string{
 	289: "CAP_MODIFY_SYSTEM_STATE", //	signalfd4
 	290: "CAP_MODIFY_SYSTEM_STATE", //	eventfd2
 	291: "CAP_MEMORY_MANIPULATION", //	epoll_create1
-
-	292: "CAP_READ_FILE", //	dup3(fd, newfd, O_RDONLY)
-	//	 : "CAP_WRITE_FILE", 		//	dup3(fd, newfd, O_WRONLY)
-
+	292: "CAP_READ_FILE",           //	dup3(fd, newfd, O_RDONLY)
 	293: "CAP_MEMORY_MANIPULATION", //	pipe2
 	294: "CAP_FILE",                //	inotify_init1
 	295: "CAP_READ_FILE",           //	preadv
@@ -329,10 +323,7 @@ var syscallToCapability = map[int]string{
 	301: "CAP_FILE_METADATA",       //	fanotify_mark
 	302: "CAP_RESOURCE_LIMITS",     //	prlimit64
 	303: "CAP_READ_FILE",           //	name_to_handle_at
-
-	304: "CAP_READ_FILE", //	open_by_handle_at(mnt_fd, handle, O_RDONLY)
-	//   : "CAP_WRITE_FILE", 		//	open_by_handle_at(mnt_fd, handle, O_WRONLY)
-
+	304: "CAP_READ_FILE",           //	open_by_handle_at(mnt_fd, handle, O_RDONLY)
 	305: "CAP_MODIFY_SYSTEM_STATE", //	clock_adjtime
 	306: "CAP_WRITE_FILE",          //	syncfs
 	307: "CAP_SEND_DATA",           //	sendmmsg
@@ -376,11 +367,7 @@ var syscallToCapability = map[int]string{
 	434: "CAP_MODIFY_SYSTEM_STATE", //	pidfd_open
 	435: "CAP_EXEC",                //	clone3
 	436: "CAP_FILE",                //	close_range
-
-	437: "CAP_READ_FILE", //	openat2(fd, "file", {flags=O_RDONLY})
-	//	 : "CAP_WRITE_FILE", 		//	openat2(fd, "file", {flags=O_WRONLY})
-	//	 : "CAP_CREATE_FILE", 		//	openat2(fd, "file", {flags=O_WRONLY | O_CREAT})
-
+	437: "CAP_READ_FILE",           //	openat2(fd, "file", {flags=O_RDONLY})
 	438: "CAP_READ_SYSTEM_STATE",   //	pidfd_getfd
 	439: "CAP_READ_FILE",           //	faccessat2
 	440: "CAP_MEMORY_MANIPULATION", //	process_madvise
@@ -400,5 +387,4 @@ var syscallToCapability = map[int]string{
 	454: "CAP_MEMORY_MANIPULATION", //	futex_wake
 	455: "CAP_MEMORY_MANIPULATION", //	futex_wait
 	456: "CAP_MEMORY_MANIPULATION", //	futex_requeue
-
 }
