@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	maxStackDepth = 20
+	maxStackDepth = 32
 )
 
 type ImportedPackages struct {
@@ -44,12 +44,18 @@ func LoadModuleCache(modManifest string) error {
 }
 
 func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {
+
+	if stackID == 0 {
+		return nil, fmt.Errorf("Invalid stack ID")
+	}
+
 	var stackTrace [maxStackDepth]uint64
 	err := stacktraces.Lookup(stackID, &stackTrace)
 	if err != nil {
 		return nil, err
 	}
 
+	// Valid stack entries
 	var result []uint64
 	for _, addr := range stackTrace {
 		if addr == 0 {
@@ -57,6 +63,11 @@ func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {
 		}
 		result = append(result, addr)
 	}
+
+	if len(result) == 0 {
+		return nil, fmt.Errorf("Empty stack trace")
+	}
+
 	return result, nil
 }
 

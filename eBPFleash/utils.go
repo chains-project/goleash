@@ -19,7 +19,21 @@ import (
 )
 
 func logEvent(event ebpfEvent, stackTrace []uint64) {
+
+	/*
+		if len(stackTrace) == 0 {
+			log.Printf("No valid stack trace available for syscall: %d", event.Syscall)
+			return
+		}
+	*/
+
 	resolvedStackTrace := stackanalyzer.ResolveSymbols(stackTrace)
+	/*
+		if resolvedStackTrace == "" {
+			log.Printf("Could not resolve symbols for stack trace")
+		}
+	*/
+
 	callerPackage, callerFunction, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
 	if err != nil {
 		log.Printf("Error getting caller package: %v", err)
@@ -30,13 +44,14 @@ func logEvent(event ebpfEvent, stackTrace []uint64) {
 	log.Printf("Invoked syscall: %d\tpid: %d\tcomm: %s\n",
 		event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]))
 
-	if callerPackage != "" && callerFunction != "" {
-		log.Printf("Stack Trace:\n%s", resolvedStackTrace)
-		log.Printf("Go caller package: %s", callerPackage)
-		log.Printf("Go caller function: %s", callerFunction)
-	} else {
-		log.Printf("Go Runtime Invocation")
-	}
+	//if callerPackage != "" && callerFunction != "" {
+	log.Printf("Stack Trace:\n%s", resolvedStackTrace)
+	log.Printf("Go caller package: %s", callerPackage)
+	log.Printf("Go caller function: %s", callerFunction)
+	//} else {
+	//	log.Printf("Go Runtime Invocation")
+	//}
+
 }
 
 func loadEBPF() (*ebpfObjects, *ringbuf.Reader, *link.Link, error) {
@@ -114,7 +129,11 @@ func setupAndRun(binaryPath string, modManifestPath string, processEvent func(eb
 					continue
 				}
 
-				stackTrace, _ := stackanalyzer.GetStackTrace(objs.Stacktraces, event.StackId)
+				stackTrace, err := stackanalyzer.GetStackTrace(objs.Stacktraces, event.StackId)
+				if err != nil {
+					log.Printf("Getting stack trace: %s", err)
+					continue
+				}
 				processEvent(event, stackTrace, objs)
 			}
 		}
