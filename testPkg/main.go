@@ -7,6 +7,31 @@ import (
 )
 
 func main() {
+
+	/*
+		os_syscall.Syscall(145, 0, 0, 0) // 145
+
+		filePath := "/etc/passwd"
+		fd, err := os_syscall.Open(filePath, os_syscall.O_RDONLY, 0) // 2
+		if err != nil {
+			fmt.Printf("Failed to open file: %v\n", err) // 1
+			os.Exit(1)
+		}
+		defer os_syscall.Close(fd) // 3
+
+		os_syscall.Syscall(145, 0, 0, 0) // 145
+
+		fmt.Printf("File descriptor: %d\n", fd)
+		buf := make([]byte, 1024)
+		n, err := os_syscall.Read(fd, buf)
+		if err != nil {
+			fmt.Printf("Failed to read file: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("File content:\n%s\n", string(buf[:n]))
+
+	*/
+
 	fmt.Printf("Syscall 0 read\n")
 	syscall.InvokeSyscall(0)
 
@@ -15,10 +40,6 @@ func main() {
 
 	fmt.Printf("\nSyscall 145 sched_getscheduler\n")
 	syscall.InvokeSyscall(145)
-	//time.Sleep(3 * time.Second)
-
-	// Riesco a killare se c'è un timer. Altrimenti tutte le altre syscall vengono invocate.
-	// Non è bloccante
 
 	fmt.Printf("\nSyscall 170 sethostname\n")
 	syscall.InvokeSyscall(170)
@@ -28,4 +49,5 @@ func main() {
 
 	fmt.Printf("\nSyscall 252 ioprio_get\n")
 	syscall.InvokeSyscall(252)
+
 }
