@@ -1,8 +1,8 @@
 .PHONY: all clean build cap-enforce sys-enforce
 
-TARGET_CMD ?= testCGO
-BINARY ?= ../testPkg/testCGO
-MANIFEST ?= ../testPkg/go.mod
+TARGET_CMD ?= testPlugin
+BINARY ?= ../testPkg/plugin/testPlugin
+MANIFEST ?= ../testPkg/plugin/go.mod
 
 all: bpf_loader
 

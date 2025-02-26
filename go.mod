@@ -7,6 +7,11 @@ require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/cilium/ebpf v0.17.1
 	github.com/jung-kurt/gofpdf v1.16.2
-	golang.org/x/mod v0.22.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/mod v0.23.0
+	golang.org/x/sys v0.30.0
+)
+
+require (
+	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/sync v0.11.0 // indirect
 )
