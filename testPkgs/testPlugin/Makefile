@@ -12,9 +12,10 @@ buildMain: main.go
 	go build -o testPlugin
 
 buildPlugin: $(PLUGIN_SRC)
-	#cp $(PLUGIN_SRC) $(PLUGIN_DEST)
+	mkdir plugin
+	cp $(PLUGIN_SRC) $(PLUGIN_DEST)
 	go build -buildmode=plugin -o $(PLUGIN_SO) $(PLUGIN_DEST)
 
 clean:
 	rm -f testPlugin
-	rm -f $(PLUGIN_DIR)
+	rm -rf $(PLUGIN_DIR)

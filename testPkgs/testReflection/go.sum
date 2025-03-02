@@ -1,2 +1,6 @@
 github.com/carminecesarano/mal_dependency v0.1.15 h1:VVJh34zI9W2CjD6Lxw6hnlWS0VY/JgdHXhyCO2R5sIU=
 github.com/carminecesarano/mal_dependency v0.1.15/go.mod h1:jxgYC6pATUPuStDrYsTQE15KLRslASXxkHr1YX2fFu4=
+github.com/carminecesarano/mal_dependency v0.1.21 h1:SQhzLO5wHKba+OVyPrDSZOUFuRpdzx6tJ4r423OMPTA=
+github.com/carminecesarano/mal_dependency v0.1.21/go.mod h1:jxgYC6pATUPuStDrYsTQE15KLRslASXxkHr1YX2fFu4=
+github.com/carminecesarano/mal_dependency v0.1.25 h1:K//neN4TobXipWl+e/hvLnhuVHwLcQ/a1So/jGhO+p4=
+github.com/carminecesarano/mal_dependency v0.1.25/go.mod h1:jxgYC6pATUPuStDrYsTQE15KLRslASXxkHr1YX2fFu4=
