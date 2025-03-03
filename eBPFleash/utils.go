@@ -8,17 +8,50 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/chains-project/goleash/eBPFleash/binanalyzer"
 	"github.com/chains-project/goleash/eBPFleash/stackanalyzer"
+	"github.com/chains-project/goleash/eBPFleash/syscallfilter"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
+	"github.com/fatih/color"
 	"golang.org/x/sys/unix"
 )
 
-func logEvent(event ebpfEvent, stackTrace []uint64) {
+func createLogFile(filename string) *os.File {
+	f, err := os.Create(filename)
+	if err != nil {
+		log.Fatalf("creating %s: %v", filename, err)
+	}
+	return f
+}
+
+func handleUnauthorized(pid uint32, msg string, f *os.File) {
+	log.Print(msg)
+	fmt.Fprintln(f, msg)
+	syscall.Kill(int(pid), syscall.SIGKILL)
+}
+
+func handleExecSyscalls(event ebpfEvent, callerPackage string, traceStore map[string]*syscallfilter.TraceEntry) {
+	if (int(event.Syscall) == 59 || int(event.Syscall) == 322) && callerPackage != "" {
+		binPath := syscallfilter.BytesToString(event.BinaryPath)
+		binID := filepath.Base(binPath)
+		traceStore[binID] = &syscallfilter.TraceEntry{
+			Type:             "bin",
+			Path:             binPath,
+			Syscalls:         []int{},
+			ExecutedBinaries: []string{},
+			Parent:           callerPackage,
+		}
+		traceStore[callerPackage].ExecutedBinaries = append(traceStore[callerPackage].ExecutedBinaries, binID)
+		log.Printf("\nExec detected: package %s executing binary %s", callerPackage, syscallfilter.BytesToString(event.Args))
+	}
+}
+
+func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 
 	/*
 		if len(stackTrace) == 0 {
@@ -40,17 +73,37 @@ func logEvent(event ebpfEvent, stackTrace []uint64) {
 		return
 	}
 
-	fmt.Printf("\n")
-	log.Printf("Invoked syscall: %d\tpid: %d\tcomm: %s\n",
-		event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:]))
+	fmt.Println()
+	fmt.Print(color.WhiteString("+------------------------------------------------------------+\n"))
+	fmt.Print(color.WhiteString("| Invoked syscall: %d\tPID: %d\tCommand: %s\n", event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:])))
+	fmt.Print(color.WhiteString("+------------------------------------------------------------+\n"))
 
-	//if callerPackage != "" && callerFunction != "" {
-	log.Printf("Stack Trace:\n%s", resolvedStackTrace)
-	log.Printf("Go caller package: %s", callerPackage)
-	log.Printf("Go caller function: %s", callerFunction)
-	//} else {
-	//	log.Printf("Go Runtime Invocation")
-	//}
+	switch eventType {
+	case "package":
+		fmt.Print(color.GreenString("Event Type: "))
+		fmt.Println(color.WhiteString("GO_PKG"))
+		fmt.Print(color.GreenString("Caller Package: "))
+		fmt.Println(color.WhiteString("%s", callerPackage))
+		fmt.Print(color.GreenString("Caller Function: "))
+		fmt.Println(color.WhiteString("%s", callerFunction))
+		fmt.Print(color.GreenString("| Stack Trace: \n"))
+		fmt.Println(color.WhiteString("%s", resolvedStackTrace))
+
+	case "binary":
+		eventComm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+		fmt.Print(color.GreenString("Event Type: "))
+		fmt.Println(color.WhiteString("EXT_BIN"))
+		fmt.Print(color.GreenString("Caller Command: "))
+		fmt.Println(color.WhiteString("%s", eventComm))
+		fmt.Print(color.GreenString("Stack Trace: \n"))
+		fmt.Println(color.WhiteString("%s", resolvedStackTrace))
+	case "runtime":
+		color.Magenta("Event Type: GO_RUNTIME")
+	default:
+		color.Red("Event Type: Unknown")
+	}
+
+	fmt.Println()
 
 }
 

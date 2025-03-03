@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
-	"os"
-	"syscall"
+	"sync"
 
 	"github.com/chains-project/goleash/eBPFleash/stackanalyzer"
 	"github.com/chains-project/goleash/eBPFleash/syscallfilter"
@@ -18,6 +18,10 @@ type Args struct {
 	Mode        string
 	ModManifest string
 }
+
+var (
+	mu sync.Mutex // Mutex for concurrent writes
+)
 
 func main() {
 	log.SetFlags(log.Ltime)
@@ -44,50 +48,73 @@ func main() {
 	} else {
 		log.Fatalf("Invalid mode: %s. Use 'build', 'sys-enforce', 'cap-enforce' or 'trace'", args.Mode)
 	}
-
-}
-
-func createLogFile(filename string) *os.File {
-	f, err := os.Create(filename)
-	if err != nil {
-		log.Fatalf("creating %s: %v", filename, err)
-	}
-	return f
-}
-
-func handleUnauthorized(pid uint32, msg string, f *os.File) {
-	log.Print(msg)
-	fmt.Fprintln(f, msg)
-	syscall.Kill(int(pid), syscall.SIGKILL)
 }
 
 func runBuildMode(args Args) {
+	traceStore := make(map[string]*syscallfilter.TraceEntry)
 	syscalls := make(map[string]map[int]bool)
+
 	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
 		callerPackage, _, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
 		if err != nil {
 			log.Printf("Error getting caller package: %v", err)
 			return
 		}
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		// Name of the current executed command
+		eventComm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+		var eventType string
+
+		// Case 1: syscall directly invoked by a package
 		if callerPackage != "" {
+			eventType = "package"
+			if _, exists := traceStore[callerPackage]; !exists {
+				traceStore[callerPackage] = &syscallfilter.TraceEntry{
+					Type:             "dep",
+					Path:             callerPackage,
+					Syscalls:         []int{},
+					ExecutedBinaries: []string{},
+				}
+			}
+
+			handleExecSyscalls(event, callerPackage, traceStore)
+
 			if _, ok := syscalls[callerPackage]; !ok {
 				syscalls[callerPackage] = make(map[int]bool)
 			}
 			syscalls[callerPackage][int(event.Syscall)] = true
+
+			uniqueSyscalls := make([]int, 0, len(syscalls[callerPackage]))
+			for syscall := range syscalls[callerPackage] {
+				uniqueSyscalls = append(uniqueSyscalls, syscall)
+			}
+			traceStore[callerPackage].Syscalls = uniqueSyscalls
+
+			// Case 2: syscall invoked (eventually) by an external binary
+		} else if entry, exists := traceStore[eventComm]; exists {
+			eventType = "binary"
+			if _, ok := syscalls[eventComm]; !ok {
+				syscalls[eventComm] = make(map[int]bool)
+			}
+			syscalls[eventComm][int(event.Syscall)] = true
+
+			uniqueSyscalls := make([]int, 0, len(syscalls[eventComm]))
+			for syscall := range syscalls[eventComm] {
+				uniqueSyscalls = append(uniqueSyscalls, syscall)
+			}
+			entry.Syscalls = uniqueSyscalls
+		} else {
+			eventType = "runtime"
 		}
-		logEvent(event, stackTrace)
+
+		logEvent(event, stackTrace, eventType)
 	})
 
-	// Convert syscalls map to the format expected by syscallfilter.Write
-	convertedSyscalls := syscallfilter.ConvertSyscallsMap(syscalls)
-	if err := syscallfilter.Write(convertedSyscalls); err != nil {
-		log.Fatalf("Writing allowlist JSON: %v", err)
-	}
-
-	// Generate and write capability allowlist
-	capAllowlist := syscallfilter.GenerateCapabilityMap(convertedSyscalls)
-	if err := syscallfilter.WriteCapabilities(capAllowlist); err != nil {
-		log.Fatalf("Writing capabilities JSON: %v", err)
+	if err := syscallfilter.WriteTraceStore(traceStore); err != nil {
+		log.Fatalf("Writing trace store to file: %v", err)
 	}
 
 	log.Println("Build mode completed. Allowlist and capabilities JSON files created.")
@@ -95,14 +122,13 @@ func runBuildMode(args Args) {
 
 func runTraceMode(args Args) {
 	setupAndRun(args.BinaryPath, args.ModManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
-		// Just log the event
-		logEvent(event, stackTrace)
+		logEvent(event, stackTrace, "none")
 	})
 	log.Println("Trace mode completed.")
 }
 
 func runSysEnforceMode(args Args) {
-	sysAllowlist, err := syscallfilter.LoadSyscalls()
+	traceStore, err := syscallfilter.LoadTraceStore()
 	if err != nil {
 		log.Fatalf("loading syscall allowlist: %v", err)
 	}
@@ -116,8 +142,9 @@ func runSysEnforceMode(args Args) {
 			log.Printf("Error getting caller package: %v", err)
 			return
 		}
-		logEvent(event, stackTrace)
-		if callerPackage != "" && !sysAllowlist.SyscallAllowed(callerPackage, int(event.Syscall)) {
+		logEvent(event, stackTrace, "none")
+
+		if callerPackage != "" && !traceStore.SyscallAllowed(callerPackage, int(event.Syscall)) {
 			handleUnauthorized(event.Pid,
 				fmt.Sprintf("Unauthorized syscall %d from package %s", event.Syscall, callerPackage),
 				f)
@@ -126,7 +153,7 @@ func runSysEnforceMode(args Args) {
 }
 
 func runCapabilityEnforceMode(args Args) {
-	capAllowlist, err := syscallfilter.LoadCapabilities()
+	traceStore, err := syscallfilter.LoadTraceStore()
 	if err != nil {
 		log.Fatalf("loading capability allowlist: %v", err)
 	}
@@ -142,14 +169,12 @@ func runCapabilityEnforceMode(args Args) {
 		}
 
 		capability, exists := syscallfilter.GetCapabilityForSyscall(int(event.Syscall))
-		if exists && callerPackage != "" {
-			if !capAllowlist.CapabilityAllowed(callerPackage, capability) {
-				handleUnauthorized(event.Pid,
-					fmt.Sprintf("Unauthorized capability %s (syscall %d) from package %s",
-						capability, event.Syscall, callerPackage),
-					f)
-			}
+		if exists && callerPackage != "" && !traceStore.CapabilityAllowed(callerPackage, capability) {
+			handleUnauthorized(event.Pid,
+				fmt.Sprintf("Unauthorized capability %s (syscall %d) from package %s",
+					capability, event.Syscall, callerPackage),
+				f)
 		}
-		logEvent(event, stackTrace)
+		logEvent(event, stackTrace, "none")
 	})
 }

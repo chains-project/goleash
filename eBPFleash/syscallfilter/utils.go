@@ -2,16 +2,20 @@ package syscallfilter
 
 import "sort"
 
-func containsInt(slice []int, item int) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
+const maxBytes = 256
+
+func BytesToString(arr [maxBytes]int8) string {
+	b := make([]byte, 0, maxBytes)
+	for _, v := range arr {
+		if v == 0 {
+			break
 		}
+		b = append(b, byte(v))
 	}
-	return false
+	return string(b)
 }
 
-func containsString(slice []string, item string) bool {
+func contains[T comparable](slice []T, item T) bool {
 	for _, s := range slice {
 		if s == item {
 			return true
@@ -29,38 +33,23 @@ func mapToSortedSlice(m map[string]bool) []string {
 	return result
 }
 
-func ConvertSyscallsMap(syscalls map[string]map[int]bool) map[string][]int {
-	result := make(map[string][]int)
-	for pkg, syscallMap := range syscalls {
-		syscallList := make([]int, 0, len(syscallMap))
-		for syscall := range syscallMap {
-			syscallList = append(syscallList, syscall)
-		}
-		result[pkg] = syscallList
-	}
-	return result
-}
-
-func mergeSyscalls(existing, new []int) []int {
-	uniqueSyscalls := make(map[int]bool)
+func mergeUniqueInts(existing, new []int) []int {
+	syscallSet := make(map[int]bool)
 	for _, syscall := range append(existing, new...) {
-		uniqueSyscalls[syscall] = true
+		syscallSet[syscall] = true
 	}
-
-	result := make([]int, 0, len(uniqueSyscalls))
-	for syscall := range uniqueSyscalls {
-		result = append(result, syscall)
+	merged := make([]int, 0, len(syscallSet))
+	for syscall := range syscallSet {
+		merged = append(merged, syscall)
 	}
-	sort.Ints(result)
-	return result
+	sort.Ints(merged)
+	return merged
 }
 
-func mergeCapabilities(existing, new []string) []string {
-	uniqueCaps := make(map[string]bool)
-	for _, cap := range append(existing, new...) {
-		uniqueCaps[cap] = true
+func mergeUniqueStrings(existing, new []string) []string {
+	uniqueSet := make(map[string]bool)
+	for _, item := range append(existing, new...) {
+		uniqueSet[item] = true
 	}
-
-	result := mapToSortedSlice(uniqueCaps)
-	return result
+	return mapToSortedSlice(uniqueSet)
 }

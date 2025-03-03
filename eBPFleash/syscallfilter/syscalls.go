@@ -2,55 +2,99 @@ package syscallfilter
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"sort"
 )
 
 type SyscallAllowlist struct {
 	Dependencies map[string][]int `json:"dependencies"`
 }
 
-func LoadSyscalls() (SyscallAllowlist, error) {
-	var existingAllowlist SyscallAllowlist
-	jsonData, err := os.ReadFile(syscallsFile)
+type TraceStore map[string]*TraceEntry
+
+type TraceEntry struct {
+	Type             string   `json:"type"`
+	Path             string   `json:"path"`
+	Syscalls         []int    `json:"syscalls"`
+	Capabilities     []string `json:"capabilities"`
+	ExecutedBinaries []string `json:"executed_binaries"`
+	Parent           string   `json:"caller_dep,omitempty"`
+}
+
+func LoadTraceStore() (TraceStore, error) {
+	traceStore := make(TraceStore)
+	jsonData, err := os.ReadFile(traceStoreFile)
 	if err != nil {
-		return existingAllowlist, err
+		return traceStore, err
 	}
-	return existingAllowlist, json.Unmarshal(jsonData, &existingAllowlist)
+	return traceStore, json.Unmarshal(jsonData, &traceStore)
 }
 
-func Write(newSyscalls map[string][]int) error {
-	existingAllowlist := readOrCreateAllowlist()
-	mergeNewSyscalls(&existingAllowlist, newSyscalls)
+func WriteTraceStore(traceStore TraceStore) error {
+	existingTraceStore := readOrCreateTraceStore()
+	mergeTraceStores(&existingTraceStore, traceStore)
 
-	data, err := json.MarshalIndent(existingAllowlist, "", "  ")
+	// Ensure syscall lists and capabilities are sorted and unique
+	for _, entry := range existingTraceStore {
+		sort.Ints(entry.Syscalls)
+		entry.Capabilities = getUniqueCapabilities(entry.Syscalls)
+	}
+
+	traceData, err := json.MarshalIndent(existingTraceStore, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshalling trace data: %v", err)
 	}
-	return os.WriteFile(syscallsFile, data, filePermissions)
+
+	return os.WriteFile(traceStoreFile, traceData, filePermissions)
 }
 
-func readOrCreateAllowlist() SyscallAllowlist {
-	var sysAllowlist SyscallAllowlist
-	data, err := os.ReadFile(syscallsFile)
-	if err == nil {
-		json.Unmarshal(data, &sysAllowlist)
+func getUniqueCapabilities(syscalls []int) []string {
+	capMap := make(map[string]bool)
+	for _, syscall := range syscalls {
+		if cap, exists := GetCapabilityForSyscall(syscall); exists {
+			capMap[cap] = true
+		}
 	}
-	if sysAllowlist.Dependencies == nil {
-		sysAllowlist.Dependencies = make(map[string][]int)
-	}
-	return sysAllowlist
+	return mapToSortedSlice(capMap)
 }
 
-func (a *SyscallAllowlist) SyscallAllowed(callerPkg string, syscall int) bool {
-	allowlist, pkg_exists := a.Dependencies[callerPkg]
-	if !pkg_exists {
-		return false
+func readOrCreateTraceStore() TraceStore {
+	existingTraceStore := make(TraceStore)
+	if _, err := os.Stat(traceStoreFile); err == nil {
+		if data, err := os.ReadFile(traceStoreFile); err == nil {
+			json.Unmarshal(data, &existingTraceStore)
+		}
 	}
-	return containsInt(allowlist, syscall)
+	return existingTraceStore
 }
 
-func mergeNewSyscalls(existing *SyscallAllowlist, newSyscalls map[string][]int) {
-	for pkg, syscalls := range newSyscalls {
-		existing.Dependencies[pkg] = mergeSyscalls(existing.Dependencies[pkg], syscalls)
+func mergeTraceStores(existing *TraceStore, new TraceStore) {
+	for key, newEntry := range new {
+		if existingEntry, exists := (*existing)[key]; exists {
+			existingEntry.Syscalls = mergeUniqueInts(existingEntry.Syscalls, newEntry.Syscalls)
+			existingEntry.ExecutedBinaries = mergeUniqueStrings(existingEntry.ExecutedBinaries, newEntry.ExecutedBinaries)
+		} else {
+			(*existing)[key] = newEntry
+		}
 	}
+}
+
+func (store TraceStore) SyscallAllowed(callerPackage string, syscall int) bool {
+	if entry, exists := store[callerPackage]; exists {
+		return contains(entry.Syscalls, syscall)
+	}
+	return false
+}
+
+func (store TraceStore) CapabilityAllowed(callerPackage string, capability string) bool {
+	if entry, exists := store[callerPackage]; exists {
+		return contains(entry.Capabilities, capability)
+	}
+	return false
+}
+
+func GetCapabilityForSyscall(syscall int) (string, bool) {
+	cap, exists := syscallToCapability[syscall]
+	return cap, exists
 }

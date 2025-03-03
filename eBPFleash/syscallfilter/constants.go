@@ -1,9 +1,8 @@
 package syscallfilter
 
 const (
-	syscallsFile     = "syscalls.json"
-	capabilitiesFile = "capabilities.json"
-	filePermissions  = 0644
+	traceStoreFile  = "tracestore.json"
+	filePermissions = 0644
 )
 
 //	: "CAP_WRITE_FILE", 		//	open("/path/to/file", O_WRONLY)

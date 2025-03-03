@@ -19,6 +19,11 @@ struct event {
     u64 syscall;
     u8  comm[COMM_SIZE];
 	u32 stack_id;
+
+    // Binary-related fields
+    char binary_path[256];
+    char args[256];
+    int fd;
 };
 
 struct {
@@ -57,16 +62,14 @@ SEC("tracepoint/raw_syscalls/sys_enter")
 // SEC("tracepoint/syscalls/sys_enter_*")
 int trace_syscall(struct trace_event_raw_sys_enter *ctx) {
 
-    
-	// Get the current PID
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	u32 *target_pid_ptr = bpf_map_lookup_elem(&target_pid_map, &pid);
 
 	if (!target_pid_ptr) {
-        
-        // Check if the current comm matches the target comm
         char comm[COMM_SIZE];
         bpf_get_current_comm(&comm, sizeof(comm));
+
+        // Check if the current comm matches the target comm
         if (str_compare(comm, target_comm, sizeof(target_comm)) == 0) {
 			u32 value = pid;
 			bpf_map_update_elem(&target_pid_map, &pid, &value, BPF_ANY);
@@ -77,19 +80,41 @@ int trace_syscall(struct trace_event_raw_sys_enter *ctx) {
         return false;
 	}
 
-	// Allocate space in the ring buffer for the event
     struct event *e;
 	e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
 	if (!e) {
 		return 0;
 	}
 
-	// Populate the event structure with pid, syscall number, 
-	// command and stack trace
+	// Populate the event with pid, comm, and syscall
 	bpf_get_current_comm(&e->comm, COMM_SIZE);
 	e->pid = pid;
 	e->syscall = ctx->id;
     // bpf_printk("SYSCALL %d\n", e->syscall);
+    
+
+    // Populate the event with binary info (for execve and execveat)
+    if (ctx->id == 59 || ctx->id == 322) {
+        
+        const char *pathname = (char *)ctx->args[0];
+        bpf_probe_read_user_str(e->binary_path, sizeof(e->binary_path), pathname);
+
+        /*
+        // Copy arguments TODO. The following only copy the first.
+        const char **argv = (const char **)ctx->args[1];
+        char *first_arg;
+        bpf_probe_read_user(&first_arg, sizeof(first_arg), &argv[0]);
+        bpf_probe_read_user_str(e->args, sizeof(e->args), first_arg);
+        
+        // For execveat, get the fd
+        if (ctx->id == 322) {
+            e->fd = (int)ctx->args[0];
+        }
+        */
+    }
+    
+    
+    // Populate the event with the stack trace
     int stack_id = bpf_get_stackid(ctx, &stacktraces, BPF_F_USER_STACK);
     if (stack_id >= 0) {
         e->stack_id = stack_id;

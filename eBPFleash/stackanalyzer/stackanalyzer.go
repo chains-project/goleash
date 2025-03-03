@@ -44,7 +44,6 @@ func LoadModuleCache(modManifest string) error {
 }
 
 func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {
-
 	if stackID == 0 {
 		return nil, fmt.Errorf("Invalid stack ID")
 	}
@@ -55,7 +54,6 @@ func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {
 		return nil, err
 	}
 
-	// Valid stack entries
 	var result []uint64
 	for _, addr := range stackTrace {
 		if addr == 0 {
@@ -81,19 +79,12 @@ func ResolveSymbols(stackTrace []uint64) string {
 }
 
 func GetCallerPackageAndFunction(stackTrace []uint64) (string, string, error) {
-
 	if ImportedPackagesCache == nil {
 		return "", "", fmt.Errorf("ImportedPackagesCache is not initialized")
 	}
 
-	// StackTrace is an array of addresses.
 	for _, addr := range stackTrace {
-
-		// Resolve the symbol at the address
-		// A symbol has the form: "pkg.func"
 		symbol := binanalyzer.Resolve(addr)
-
-		// Check if the symbol contains an imported Go package
 		for _, pkgName := range ImportedPackagesCache.packages {
 			if strings.Contains(symbol, pkgName) {
 				funcName := strings.TrimPrefix(symbol, pkgName+".")
