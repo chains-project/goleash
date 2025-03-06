@@ -36,8 +36,8 @@ func handleUnauthorized(pid uint32, msg string, f *os.File) {
 }
 
 func handleExecSyscalls(event ebpfEvent, callerPackage string, traceStore map[string]*syscallfilter.TraceEntry) {
-	if (int(event.Syscall) == 59 || int(event.Syscall) == 322) && callerPackage != "" {
-		binPath := syscallfilter.BytesToString(event.BinaryPath)
+	if (int(event.SyscallId) == 59 || int(event.SyscallId) == 322) && callerPackage != "" {
+		binPath := syscallfilter.BytesToString(event.ExecPath)
 		binID := filepath.Base(binPath)
 		traceStore[binID] = &syscallfilter.TraceEntry{
 			Type:             "bin",
@@ -47,7 +47,7 @@ func handleExecSyscalls(event ebpfEvent, callerPackage string, traceStore map[st
 			Parent:           callerPackage,
 		}
 		traceStore[callerPackage].ExecutedBinaries = append(traceStore[callerPackage].ExecutedBinaries, binID)
-		log.Printf("\nExec detected: package %s executing binary %s", callerPackage, syscallfilter.BytesToString(event.Args))
+		log.Printf("\nExec detected: package %s executing binary %s", callerPackage, syscallfilter.BytesToString(event.ExecArgs))
 	}
 }
 
@@ -75,7 +75,7 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 
 	fmt.Println()
 	fmt.Print(color.WhiteString("+------------------------------------------------------------+\n"))
-	fmt.Print(color.WhiteString("| Invoked syscall: %d\tPID: %d\tCommand: %s\n", event.Syscall, event.Pid, unix.ByteSliceToString(event.Comm[:])))
+	fmt.Print(color.WhiteString("| Invoked syscall: %d\tPID: %d\tCommand: %s\n", event.SyscallId, event.Pid, unix.ByteSliceToString(event.ProcessName[:])))
 	fmt.Print(color.WhiteString("+------------------------------------------------------------+\n"))
 
 	switch eventType {
@@ -86,15 +86,15 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 		fmt.Println(color.WhiteString("%s", callerPackage))
 		fmt.Print(color.GreenString("Caller Function: "))
 		fmt.Println(color.WhiteString("%s", callerFunction))
-		fmt.Print(color.GreenString("| Stack Trace: \n"))
+		fmt.Print(color.GreenString("Stack Trace: \n"))
 		fmt.Println(color.WhiteString("%s", resolvedStackTrace))
 
 	case "binary":
-		eventComm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+		ProcessName := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
 		fmt.Print(color.GreenString("Event Type: "))
 		fmt.Println(color.WhiteString("EXT_BIN"))
 		fmt.Print(color.GreenString("Caller Command: "))
-		fmt.Println(color.WhiteString("%s", eventComm))
+		fmt.Println(color.WhiteString("%s", ProcessName))
 		fmt.Print(color.GreenString("Stack Trace: \n"))
 		fmt.Println(color.WhiteString("%s", resolvedStackTrace))
 	case "runtime":
@@ -182,7 +182,7 @@ func setupAndRun(binaryPath string, modManifestPath string, processEvent func(eb
 					continue
 				}
 
-				stackTrace, err := stackanalyzer.GetStackTrace(objs.Stacktraces, event.StackId)
+				stackTrace, err := stackanalyzer.GetStackTrace(objs.Stacktraces, event.StackTraceId)
 				if err != nil {
 					log.Printf("Getting stack trace: %s", err)
 					continue
