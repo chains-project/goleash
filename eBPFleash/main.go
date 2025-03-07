@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"path/filepath"
 	"sync"
 
 	"github.com/chains-project/goleash/eBPFleash/stackanalyzer"
@@ -21,6 +22,11 @@ type RuntimeConfig struct {
 
 var (
 	mu sync.Mutex // Mutex for concurrent writes
+)
+
+const (
+	EventSysEnter = 0
+	EventSysExit  = 1
 )
 
 func main() {
@@ -61,16 +67,45 @@ func runBuildMode(args RuntimeConfig) {
 			return
 		}
 
+		execComm := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
+
 		mu.Lock()
 		defer mu.Unlock()
 
-		// Name of the current executed command
-		execComm := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
-		var eventType string
+		// Handle execve/execveat syscalls (59/322)
+		if (event.SyscallId == 59 || event.SyscallId == 322) && event.EventType == EventSysExit {
 
-		// Case 1: syscall directly invoked by a package
+			log.Printf("Sys_exit event: %d", event.SyscallId)
+
+			execPath := syscallfilter.BytesToString(event.ExecPath)
+			execPath = filepath.Base(execPath)
+
+			if execPath != "" {
+				// Create entry for the executed binary
+				traceStore[execPath] = &syscallfilter.TraceEntry{
+					Type:     "binary",
+					Path:     execPath,
+					Syscalls: []int{},
+					Parent:   callerPackage,
+				}
+
+				// Update caller package's executed binaries list
+				if callerPackage != "" {
+					if entry, exists := traceStore[callerPackage]; exists {
+						entry.ExecutedBinaries = append(entry.ExecutedBinaries, execPath)
+					}
+				}
+			}
+
+			logEvent(event, stackTrace, "binary")
+			return
+		}
+
+		// Handle other syscalls from packages
 		if callerPackage != "" {
-			eventType = "package"
+
+			log.Printf("Sys_enter event: %d", event.SyscallId)
+
 			if _, exists := traceStore[callerPackage]; !exists {
 				traceStore[callerPackage] = &syscallfilter.TraceEntry{
 					Type:             "dep",
@@ -79,8 +114,6 @@ func runBuildMode(args RuntimeConfig) {
 					ExecutedBinaries: []string{},
 				}
 			}
-
-			handleExecSyscalls(event, callerPackage, traceStore)
 
 			if _, ok := syscalls[callerPackage]; !ok {
 				syscalls[callerPackage] = make(map[int]bool)
@@ -93,9 +126,11 @@ func runBuildMode(args RuntimeConfig) {
 			}
 			traceStore[callerPackage].Syscalls = uniqueSyscalls
 
-			// Case 2: syscall invoked by an external binary
+			logEvent(event, stackTrace, "package")
+
+			// Handle other syscalls from binaries
 		} else if entry, exists := traceStore[execComm]; exists {
-			eventType = "binary"
+
 			if _, ok := syscalls[execComm]; !ok {
 				syscalls[execComm] = make(map[int]bool)
 			}
@@ -106,11 +141,13 @@ func runBuildMode(args RuntimeConfig) {
 				uniqueSyscalls = append(uniqueSyscalls, syscall)
 			}
 			entry.Syscalls = uniqueSyscalls
+			logEvent(event, stackTrace, "binary")
+
+			// Just Log syscalls from runtime
 		} else {
-			eventType = "runtime"
+			logEvent(event, stackTrace, "runtime")
 		}
 
-		logEvent(event, stackTrace, eventType)
 	})
 
 	if err := syscallfilter.WriteTraceStore(traceStore); err != nil {
@@ -146,6 +183,15 @@ func runSysEnforceMode(args RuntimeConfig) {
 		execComm := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
 		logEvent(event, stackTrace, "none")
 
+		if (event.SyscallId == 59 || event.SyscallId == 322) && event.EventType == EventSysExit {
+			if callerPackage != "" && !traceStore.SyscallAllowed(callerPackage, int(event.SyscallId)) {
+				handleUnauthorized(event.Pid,
+					fmt.Sprintf("Unauthorized exec syscall %d from package %s", event.SyscallId, callerPackage),
+					f)
+			}
+			return
+		}
+
 		// Case 1: syscall directly invoked by a package
 		if callerPackage != "" && !traceStore.SyscallAllowed(callerPackage, int(event.SyscallId)) {
 			handleUnauthorized(event.Pid,
@@ -179,6 +225,18 @@ func runCapabilityEnforceMode(args RuntimeConfig) {
 
 		execComm := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
 		capability, exists := syscallfilter.GetCapabilityForSyscall(int(event.SyscallId))
+
+		// Handle execve/execveat syscalls
+		if (event.SyscallId == 59 || event.SyscallId == 322) && event.EventType == EventSysExit {
+			if exists && callerPackage != "" && !traceStore.CapabilityAllowed(callerPackage, capability) {
+				handleUnauthorized(event.Pid,
+					fmt.Sprintf("Unauthorized capability %s (exec syscall %d) from package %s",
+						capability, event.SyscallId, callerPackage),
+					f)
+			}
+			logEvent(event, stackTrace, "exec")
+			return
+		}
 
 		// Case 1: capability used by a package
 		if exists {

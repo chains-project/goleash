@@ -36,19 +36,18 @@ func handleUnauthorized(pid uint32, msg string, f *os.File) {
 }
 
 func handleExecSyscalls(event ebpfEvent, callerPackage string, traceStore map[string]*syscallfilter.TraceEntry) {
-	if (int(event.SyscallId) == 59 || int(event.SyscallId) == 322) && callerPackage != "" {
-		binPath := syscallfilter.BytesToString(event.ExecPath)
-		binID := filepath.Base(binPath)
-		traceStore[binID] = &syscallfilter.TraceEntry{
-			Type:             "bin",
-			Path:             binPath,
-			Syscalls:         []int{},
-			ExecutedBinaries: []string{},
-			Parent:           callerPackage,
-		}
-		traceStore[callerPackage].ExecutedBinaries = append(traceStore[callerPackage].ExecutedBinaries, binID)
-		log.Printf("\nExec detected: package %s executing binary %s", callerPackage, syscallfilter.BytesToString(event.ExecArgs))
+	binPath := syscallfilter.BytesToString(event.ExecPath)
+	binID := filepath.Base(binPath)
+
+	traceStore[binID] = &syscallfilter.TraceEntry{
+		Type:             "bin",
+		Path:             binPath,
+		Syscalls:         []int{},
+		ExecutedBinaries: []string{},
+		Parent:           callerPackage,
 	}
+
+	traceStore[callerPackage].ExecutedBinaries = append(traceStore[callerPackage].ExecutedBinaries, binID)
 }
 
 func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
@@ -99,6 +98,7 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 		fmt.Println(color.WhiteString("%s", resolvedStackTrace))
 	case "runtime":
 		color.Magenta("Event Type: GO_RUNTIME")
+		fmt.Println(color.MagentaString("%s", resolvedStackTrace))
 	default:
 		color.Red("Event Type: Unknown")
 	}
@@ -107,7 +107,7 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 
 }
 
-func loadEBPF() (*ebpfObjects, *ringbuf.Reader, *link.Link, error) {
+func loadEBPF() (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 	// Allow the current process to lock memory for eBPF resources.
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, nil, nil, fmt.Errorf("removing memlock: %w", err)
@@ -119,22 +119,33 @@ func loadEBPF() (*ebpfObjects, *ringbuf.Reader, *link.Link, error) {
 		return nil, nil, nil, fmt.Errorf("loading objects: %w", err)
 	}
 
-	// Open a tracepoint and attach the pre-compiled program.
-	tp, err := link.Tracepoint("raw_syscalls", "sys_enter", objs.TraceSyscall, nil)
+	// Open two tracepoint and attach the pre-compiled program.
+	var tps []*link.Link
+	tpEnter, err := link.Tracepoint("raw_syscalls", "sys_enter", objs.TraceSyscall, nil)
 	if err != nil {
 		objs.Close()
-		return nil, nil, nil, fmt.Errorf("opening tracepoint: %w", err)
+		return nil, nil, nil, fmt.Errorf("opening sys_enter tracepoint: %w", err)
 	}
+	tps = append(tps, &tpEnter)
+
+	tpExit, err := link.Tracepoint("raw_syscalls", "sys_exit", objs.TraceSyscallExit, nil)
+	if err != nil {
+		tpEnter.Close()
+		objs.Close()
+		return nil, nil, nil, fmt.Errorf("opening sys_exit tracepoint: %w", err)
+	}
+	tps = append(tps, &tpExit)
 
 	// Open a ringbuf reader from userspace RINGBUF map described in the eBPF C program.
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
-		tp.Close()
+		tpEnter.Close()
+		tpExit.Close()
 		objs.Close()
 		return nil, nil, nil, fmt.Errorf("opening ringbuf reader: %w", err)
 	}
 
-	return &objs, rd, &tp, nil
+	return &objs, rd, tps, nil
 }
 
 func setupAndRun(binaryPath string, modManifestPath string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
@@ -147,13 +158,15 @@ func setupAndRun(binaryPath string, modManifestPath string, processEvent func(eb
 		log.Fatalf("Loading module cache: %v", err)
 	}
 
-	objs, rd, tp, err := loadEBPF()
+	objs, rd, tps, err := loadEBPF()
 	if err != nil {
 		log.Fatalf("Setting up eBPF: %v", err)
 	}
 	defer objs.Close()
 	defer rd.Close()
-	defer (*tp).Close()
+	for _, tp := range tps {
+		defer (*tp).Close()
+	}
 
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)

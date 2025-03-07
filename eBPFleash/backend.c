@@ -2,6 +2,9 @@
 
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_core_read.h>
+#include <sys/syscall.h>
+
 
 #ifndef TARGET_CMD
 #define TARGET_CMD "default_comm"
@@ -10,6 +13,9 @@
 #define PROCESS_NAME_SIZE 100
 #define PATH_SIZE 256
 #define MAX_STACK_DEPTH 32
+
+#define EVENT_SYS_ENTER 0
+#define EVENT_SYS_EXIT 1
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
@@ -23,7 +29,8 @@ struct event {
     u32 stack_trace_id;
     char exec_path[PATH_SIZE];
     char exec_args[PATH_SIZE];
-    int exec_fd;
+    int exec_fd;      
+    u8 event_type;
 };
 
 // Ring buffer for event transmission
@@ -48,6 +55,20 @@ struct {
     __type(value, u32);
 } target_process_map SEC(".maps");
 
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 10000);
+    __type(key, u32);
+    __type(value, char[PATH_SIZE]);
+} temp_exec_paths SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 10240);
+    __type(key, u32);
+    __type(value, u32);
+} temp_stack_ids SEC(".maps");
+
 const struct event *unused __attribute__((unused));
 
 // Helper function to compare strings
@@ -62,6 +83,7 @@ static __always_inline int strcmp(const char *s1, const char *s2, int max_size) 
 SEC("tracepoint/raw_syscalls/sys_enter")
 // SEC("tracepoint/syscalls/sys_enter_*")
 int trace_syscall(struct trace_event_raw_sys_enter *ctx) {
+    
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	u32 *tracked_pid = bpf_map_lookup_elem(&target_process_map, &pid);
 
@@ -84,34 +106,72 @@ int trace_syscall(struct trace_event_raw_sys_enter *ctx) {
 	struct event *e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
 	if (!e) return 0;
 	
+    e->event_type = EVENT_SYS_ENTER;
 	bpf_get_current_comm(&e->process_name, PROCESS_NAME_SIZE);
 	e->pid = pid;
 	e->syscall_id = ctx->id;
-
-    // Handle execve-related syscalls
-    const bool is_exec_syscall = (ctx->id == 59 || ctx->id == 322);
-    if (is_exec_syscall) {
-        const char *path = (char *)ctx->args[0];
-        bpf_probe_read_user_str(e->exec_path, sizeof(e->exec_path), path);
-
-        if (ctx->id == 322) { // execveat
-            e->exec_fd = (int)ctx->args[0];
-        }
-
-        /*
-        const char **argv = (const char **)ctx->args[1];
-        char *first_arg;
-        bpf_probe_read_user(&first_arg, sizeof(first_arg), &argv[0]);
-        bpf_probe_read_user_str(e->args, sizeof(e->args), first_arg);
-        */
-    }
-    
-    
-    // Stack trace capture
     int stack_id = bpf_get_stackid(ctx, &stacktraces, BPF_F_USER_STACK);
     e->stack_trace_id = (stack_id >= 0) ? stack_id : 0;
 
-	bpf_ringbuf_submit(e, 0);
+    // Store exec path for execve and execveat syscalls
+    if (ctx->id == 59 || ctx->id == 322) {
 
+        int stack_id = bpf_get_stackid(ctx, &stacktraces, BPF_F_USER_STACK);
+        if (stack_id >= 0) {
+            bpf_map_update_elem(&temp_stack_ids, &pid, &stack_id, BPF_ANY);
+        }
+
+        const char *path = (char *)ctx->args[0];
+        char exec_path[PATH_SIZE];
+        bpf_probe_read_user_str(exec_path, sizeof(exec_path), path);
+        bpf_map_update_elem(&temp_exec_paths, &pid, &exec_path, BPF_ANY);
+    }
+
+	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
+
+
+SEC("tracepoint/raw_syscalls/sys_exit")
+int trace_syscall_exit(struct trace_event_raw_sys_exit *ctx) {
+   
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    u32 *tracked_pid = bpf_map_lookup_elem(&target_process_map, &pid);
+
+    if (!tracked_pid || pid != *tracked_pid) {
+        return 0;
+    }
+
+    if (ctx->id != 59 && ctx->id != 322) {
+        return 0;
+    }
+
+    struct event *e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
+    if (!e) return 0;
+
+    e->event_type = EVENT_SYS_EXIT;
+    bpf_get_current_comm(&e->process_name, PROCESS_NAME_SIZE);
+    e->pid = pid;
+    e->syscall_id = ctx->id;
+
+    // Retrieve stored exec_path and stack_id for execve syscalls
+    u32 *stored_stack_id = bpf_map_lookup_elem(&temp_stack_ids, &pid);
+    if (stored_stack_id) {
+        e->stack_trace_id = *stored_stack_id;
+        bpf_map_delete_elem(&temp_stack_ids, &pid);
+    }
+
+    char *stored_path = bpf_map_lookup_elem(&temp_exec_paths, &pid);
+    if (stored_path) {
+        __builtin_memcpy(e->exec_path, stored_path, PATH_SIZE);
+        bpf_map_delete_elem(&temp_exec_paths, &pid);
+    }
+
+    bpf_ringbuf_submit(e, 0);
+        
+    return 0;
+    
+}
+
+
+
