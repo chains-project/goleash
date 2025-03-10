@@ -8,12 +8,10 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/chains-project/goleash/eBPFleash/binanalyzer"
 	"github.com/chains-project/goleash/eBPFleash/stackanalyzer"
-	"github.com/chains-project/goleash/eBPFleash/syscallfilter"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
@@ -30,24 +28,9 @@ func createLogFile(filename string) *os.File {
 }
 
 func handleUnauthorized(pid uint32, msg string, f *os.File) {
+	syscall.Kill(int(pid), syscall.SIGKILL)
 	log.Print(msg)
 	fmt.Fprintln(f, msg)
-	syscall.Kill(int(pid), syscall.SIGKILL)
-}
-
-func handleExecSyscalls(event ebpfEvent, callerPackage string, traceStore map[string]*syscallfilter.TraceEntry) {
-	binPath := syscallfilter.BytesToString(event.ExecPath)
-	binID := filepath.Base(binPath)
-
-	traceStore[binID] = &syscallfilter.TraceEntry{
-		Type:             "bin",
-		Path:             binPath,
-		Syscalls:         []int{},
-		ExecutedBinaries: []string{},
-		Parent:           callerPackage,
-	}
-
-	traceStore[callerPackage].ExecutedBinaries = append(traceStore[callerPackage].ExecutedBinaries, binID)
 }
 
 func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {

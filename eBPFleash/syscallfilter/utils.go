@@ -53,3 +53,8 @@ func mergeUniqueStrings(existing, new []string) []string {
 	}
 	return mapToSortedSlice(uniqueSet)
 }
+
+func (ts TraceStore) HasEntry(name string) bool {
+	_, ok := ts[name]
+	return ok
+}
