@@ -69,6 +69,7 @@ struct {
     __type(value, u32);
 } temp_stack_ids SEC(".maps");
 
+
 const struct event *unused __attribute__((unused));
 
 // Helper function to compare strings
@@ -82,7 +83,7 @@ static __always_inline int strcmp(const char *s1, const char *s2, int max_size) 
 
 SEC("tracepoint/raw_syscalls/sys_enter")
 // SEC("tracepoint/syscalls/sys_enter_*")
-int trace_syscall(struct trace_event_raw_sys_enter *ctx) {
+int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
     
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	u32 *tracked_pid = bpf_map_lookup_elem(&target_process_map, &pid);
@@ -128,6 +129,7 @@ int trace_syscall(struct trace_event_raw_sys_enter *ctx) {
     }
 
 	bpf_ringbuf_submit(e, 0);
+
 	return 0;
 }
 

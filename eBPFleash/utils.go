@@ -104,7 +104,7 @@ func loadEBPF() (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 
 	// Open two tracepoint and attach the pre-compiled program.
 	var tps []*link.Link
-	tpEnter, err := link.Tracepoint("raw_syscalls", "sys_enter", objs.TraceSyscall, nil)
+	tpEnter, err := link.Tracepoint("raw_syscalls", "sys_enter", objs.TraceSyscallEnter, nil)
 	if err != nil {
 		objs.Close()
 		return nil, nil, nil, fmt.Errorf("opening sys_enter tracepoint: %w", err)
