@@ -40,7 +40,7 @@ func LoadBinarySymbolsCache(binaryPath string) error {
 				End:   sym.Value + sym.Size,
 			})
 			symbolCount++
-			// fmt.Printf("Added symbol: %s (Start: 0x%x, Size: %d)\n", sym.Name, sym.Value, sym.Size)
+			//fmt.Printf("Added symbol: %s (Start: 0x%x, Size: %d)\n", sym.Name, sym.Value, sym.Size)
 		}
 	}
 
@@ -55,4 +55,12 @@ func Resolve(address uint64) string {
 		}
 	}
 	return fmt.Sprintf("0x%x", address)
+}
+
+func ResolveStackTrace(addresses []uint64) []string {
+	resolved := make([]string, len(addresses))
+	for i, addr := range addresses {
+		resolved[i] = Resolve(addr)
+	}
+	return resolved
 }

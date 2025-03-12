@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/chains-project/goleash/eBPFleash/binanalyzer"
 	"github.com/cilium/ebpf"
 	"golang.org/x/mod/modfile"
 )
@@ -13,6 +12,10 @@ import (
 const (
 	maxStackDepth = 32
 )
+
+var thirdPartyPrefixes = []string{
+	"github.com/", "gitlab.com/", "bitbucket.org/",
+}
 
 type ImportedPackages struct {
 	packages []string
@@ -45,7 +48,7 @@ func LoadModuleCache(modManifest string) error {
 
 func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {
 	if stackID == 0 {
-		return nil, fmt.Errorf("Invalid stack ID")
+		return nil, fmt.Errorf("invalid stack ID")
 	}
 
 	var stackTrace [maxStackDepth]uint64
@@ -63,34 +66,37 @@ func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {
 	}
 
 	if len(result) == 0 {
-		return nil, fmt.Errorf("Empty stack trace")
+		return nil, fmt.Errorf("empty stack trace")
 	}
 
 	return result, nil
 }
 
-func ResolveSymbols(stackTrace []uint64) string {
-	var resolved []string
-	for _, addr := range stackTrace {
-		symbol := binanalyzer.Resolve(addr)
-		resolved = append(resolved, symbol)
-	}
-	return strings.Join(resolved, "\n")
-}
+func FindCallerPackage(stackTrace []string) (bool, string, string) {
 
-func GetCallerPackageAndFunction(stackTrace []uint64) (string, string, error) {
-	if ImportedPackagesCache == nil {
-		return "", "", fmt.Errorf("ImportedPackagesCache is not initialized")
-	}
-
-	for _, addr := range stackTrace {
-		symbol := binanalyzer.Resolve(addr)
-		for _, pkgName := range ImportedPackagesCache.packages {
-			if strings.Contains(symbol, pkgName) {
-				funcName := strings.TrimPrefix(symbol, pkgName+".")
-				return pkgName, funcName, nil
+	for _, frame := range stackTrace {
+		for _, prefix := range thirdPartyPrefixes {
+			if strings.HasPrefix(frame, prefix) {
+				lastDotIndex := strings.LastIndex(frame, ".")
+				if lastDotIndex != -1 {
+					return true, frame[:lastDotIndex], frame[lastDotIndex+1:]
+				}
+				return true, frame, ""
 			}
 		}
 	}
-	return "", "", nil
+	return false, "", ""
+}
+
+func IsPackageInCache(pkgName string) bool {
+	if ImportedPackagesCache == nil {
+		return false
+	}
+
+	for _, cachedPkg := range ImportedPackagesCache.packages {
+		if strings.HasPrefix(pkgName, cachedPkg+"/") {
+			return true
+		}
+	}
+	return false
 }

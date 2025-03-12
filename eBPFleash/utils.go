@@ -19,6 +19,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const (
+	ENFORCE_MODE = 0
+	BUILD_MODE   = 1
+)
+
 func createLogFile(filename string) *os.File {
 	f, err := os.Create(filename)
 	if err != nil {
@@ -27,33 +32,21 @@ func createLogFile(filename string) *os.File {
 	return f
 }
 
-func handleUnauthorized(pid uint32, msg string, f *os.File) {
+func KillUnauthorized(pid uint32, msg string, f *os.File) {
 	syscall.Kill(int(pid), syscall.SIGKILL)
+	log.Print(msg)
+	fmt.Fprintln(f, msg)
+}
+
+func WarningAuthorized(pid uint32, msg string, f *os.File) {
 	log.Print(msg)
 	fmt.Fprintln(f, msg)
 }
 
 func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 
-	/*
-		if len(stackTrace) == 0 {
-			log.Printf("No valid stack trace available for syscall: %d", event.Syscall)
-			return
-		}
-	*/
-
-	resolvedStackTrace := stackanalyzer.ResolveSymbols(stackTrace)
-	/*
-		if resolvedStackTrace == "" {
-			log.Printf("Could not resolve symbols for stack trace")
-		}
-	*/
-
-	callerPackage, callerFunction, err := stackanalyzer.GetCallerPackageAndFunction(stackTrace)
-	if err != nil {
-		log.Printf("Error getting caller package: %v", err)
-		return
-	}
+	resolvedStackTrace := binanalyzer.ResolveStackTrace(stackTrace)
+	_, callerPackage, callerFunction := stackanalyzer.FindCallerPackage(resolvedStackTrace)
 
 	fmt.Println()
 	fmt.Print(color.WhiteString("+------------------------------------------------------------+\n"))
@@ -69,8 +62,9 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 		fmt.Print(color.GreenString("Caller Function: "))
 		fmt.Println(color.WhiteString("%s", callerFunction))
 		fmt.Print(color.GreenString("Stack Trace: \n"))
-		fmt.Println(color.WhiteString("%s", resolvedStackTrace))
-
+		for _, frame := range resolvedStackTrace {
+			fmt.Println(color.WhiteString("%s", frame))
+		}
 	case "binary":
 		ProcessName := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
 		fmt.Print(color.GreenString("Event Type: "))
@@ -78,10 +72,14 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 		fmt.Print(color.GreenString("Caller Command: "))
 		fmt.Println(color.WhiteString("%s", ProcessName))
 		fmt.Print(color.GreenString("Stack Trace: \n"))
-		fmt.Println(color.WhiteString("%s", resolvedStackTrace))
+		for _, frame := range resolvedStackTrace {
+			fmt.Println(color.WhiteString("%s", frame))
+		}
 	case "runtime":
 		color.Magenta("Event Type: GO_RUNTIME")
-		fmt.Println(color.MagentaString("%s", resolvedStackTrace))
+		for _, frame := range resolvedStackTrace {
+			fmt.Println(color.MagentaString("%s", frame))
+		}
 	default:
 		color.Red("Event Type: Unknown")
 	}
@@ -90,7 +88,7 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 
 }
 
-func loadEBPF() (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
+func loadEBPF(mode int) (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 	// Allow the current process to lock memory for eBPF resources.
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, nil, nil, fmt.Errorf("removing memlock: %w", err)
@@ -111,19 +109,24 @@ func loadEBPF() (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 	}
 	tps = append(tps, &tpEnter)
 
-	tpExit, err := link.Tracepoint("raw_syscalls", "sys_exit", objs.TraceSyscallExit, nil)
-	if err != nil {
-		tpEnter.Close()
-		objs.Close()
-		return nil, nil, nil, fmt.Errorf("opening sys_exit tracepoint: %w", err)
+	var tpExit link.Link
+	if mode == BUILD_MODE {
+		tpExit, err := link.Tracepoint("raw_syscalls", "sys_exit", objs.TraceSyscallExit, nil)
+		if err != nil {
+			tpEnter.Close()
+			objs.Close()
+			return nil, nil, nil, fmt.Errorf("opening sys_exit tracepoint: %w", err)
+		}
+		tps = append(tps, &tpExit)
 	}
-	tps = append(tps, &tpExit)
 
 	// Open a ringbuf reader from userspace RINGBUF map described in the eBPF C program.
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
 		tpEnter.Close()
-		tpExit.Close()
+		if mode == BUILD_MODE {
+			tpExit.Close()
+		}
 		objs.Close()
 		return nil, nil, nil, fmt.Errorf("opening ringbuf reader: %w", err)
 	}
@@ -131,7 +134,7 @@ func loadEBPF() (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 	return &objs, rd, tps, nil
 }
 
-func setupAndRun(binaryPath string, modManifestPath string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
+func setupAndRun(mode int, binaryPath string, modManifestPath string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
 	if err := binanalyzer.LoadBinarySymbolsCache(binaryPath); err != nil {
 		log.Fatalf("Populating symbol cache: %v", err)
 	}
@@ -141,7 +144,7 @@ func setupAndRun(binaryPath string, modManifestPath string, processEvent func(eb
 		log.Fatalf("Loading module cache: %v", err)
 	}
 
-	objs, rd, tps, err := loadEBPF()
+	objs, rd, tps, err := loadEBPF(mode)
 	if err != nil {
 		log.Fatalf("Setting up eBPF: %v", err)
 	}
