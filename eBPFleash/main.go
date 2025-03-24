@@ -71,8 +71,6 @@ func runBuildMode(args RuntimeConfig) {
 		// Handle execve/execveat syscalls (59/322) on SYS_EXIT
 		if (event.SyscallId == 59 || event.SyscallId == 322) && event.EventType == EventSysExit {
 
-			log.Printf("Sys_exit event: %d", event.SyscallId)
-
 			execPath := syscallfilter.BytesToString(event.ExecPath)
 			execPath = filepath.Base(execPath)
 
@@ -99,7 +97,6 @@ func runBuildMode(args RuntimeConfig) {
 
 			// CASE A: Syscall from a Go package
 			logEvent(event, stackTrace, "package")
-			log.Printf("Sys_enter event: %d", event.SyscallId)
 
 			if _, exists := traceStore[callerPackage]; !exists {
 				traceStore[callerPackage] = &syscallfilter.TraceEntry{

@@ -17,7 +17,7 @@ const (
 //	: "CAP_WRITE_FILE", 		//	openat2(fd, "file", {flags=O_WRONLY})
 //	: "CAP_CREATE_FILE", 		//	openat2(fd, "file", {flags=O_WRONLY | O_CREAT})
 
-var syscallToCapability = map[int]string{
+var SyscallToCapability = map[int]string{
 	0:   "CAP_READ_FILE",           //	read
 	1:   "CAP_WRITE_FILE",          //	write
 	2:   "CAP_READ_FILE",           //	open("/path/to/file", O_RDONLY)

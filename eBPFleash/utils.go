@@ -12,6 +12,7 @@ import (
 
 	"github.com/chains-project/goleash/eBPFleash/binanalyzer"
 	"github.com/chains-project/goleash/eBPFleash/stackanalyzer"
+	"github.com/chains-project/goleash/eBPFleash/syscallfilter"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
@@ -48,32 +49,39 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 	resolvedStackTrace := binanalyzer.ResolveStackTrace(stackTrace)
 	_, callerPackage, callerFunction := stackanalyzer.FindCallerPackage(resolvedStackTrace)
 
+	// Get capability associated with the syscall
+	capability, hasCapability := syscallfilter.SyscallToCapability[int(event.SyscallId)]
+	if !hasCapability {
+		capability = "UNKNOWN"
+	}
+
 	fmt.Println()
-	fmt.Print(color.WhiteString("+------------------------------------------------------------+\n"))
-	fmt.Print(color.WhiteString("| Invoked syscall: %d\tPID: %d\tCommand: %s\n", event.SyscallId, event.Pid, unix.ByteSliceToString(event.ProcessName[:])))
-	fmt.Print(color.WhiteString("+------------------------------------------------------------+\n"))
+	fmt.Print(color.BlackString("+------------------------------------------------------------+\n"))
+	fmt.Print(color.BlackString("| Invoked syscall: %d\tPID: %d\tCommand: %s\n", event.SyscallId, event.Pid, unix.ByteSliceToString(event.ProcessName[:])))
+	fmt.Print(color.BlackString("| Required capability: %s\n", capability))
+	fmt.Print(color.BlackString("+------------------------------------------------------------+\n"))
 
 	switch eventType {
 	case "package":
 		fmt.Print(color.GreenString("Event Type: "))
-		fmt.Println(color.WhiteString("GO_PKG"))
+		fmt.Println(color.BlackString("GO_PKG"))
 		fmt.Print(color.GreenString("Caller Package: "))
-		fmt.Println(color.WhiteString("%s", callerPackage))
+		fmt.Println(color.BlackString("%s", callerPackage))
 		fmt.Print(color.GreenString("Caller Function: "))
-		fmt.Println(color.WhiteString("%s", callerFunction))
+		fmt.Println(color.BlackString("%s", callerFunction))
 		fmt.Print(color.GreenString("Stack Trace: \n"))
 		for _, frame := range resolvedStackTrace {
-			fmt.Println(color.WhiteString("%s", frame))
+			fmt.Println(color.BlackString("%s", frame))
 		}
 	case "binary":
 		ProcessName := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
 		fmt.Print(color.GreenString("Event Type: "))
-		fmt.Println(color.WhiteString("EXT_BIN"))
+		fmt.Println(color.BlackString("EXT_BIN"))
 		fmt.Print(color.GreenString("Caller Command: "))
-		fmt.Println(color.WhiteString("%s", ProcessName))
+		fmt.Println(color.BlackString("%s", ProcessName))
 		fmt.Print(color.GreenString("Stack Trace: \n"))
 		for _, frame := range resolvedStackTrace {
-			fmt.Println(color.WhiteString("%s", frame))
+			fmt.Println(color.BlackString("%s", frame))
 		}
 	case "runtime":
 		color.Magenta("Event Type: GO_RUNTIME")

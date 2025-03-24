@@ -95,6 +95,6 @@ func (store TraceStore) CapabilityAllowed(callerPackage string, capability strin
 }
 
 func GetCapabilityForSyscall(syscall int) (string, bool) {
-	cap, exists := syscallToCapability[syscall]
+	cap, exists := SyscallToCapability[syscall]
 	return cap, exists
 }
