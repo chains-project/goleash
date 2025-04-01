@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/chains-project/goleash/eBPFleash/binanalyzer"
@@ -16,9 +17,8 @@ import (
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event -cflags "-DTARGET_CMD='\"${TARGET_CMD}\"'" ebpf backend.c
 
 type RuntimeConfig struct {
-	BinaryPath     string
-	Mode           string
-	ModuleManifest string
+	BinaryPath string
+	Mode       string
 }
 
 var (
@@ -36,11 +36,10 @@ func main() {
 	var config RuntimeConfig
 	flag.StringVar(&config.BinaryPath, "binary", "", "Path to the binary for syscall tracking")
 	flag.StringVar(&config.Mode, "mode", "enforce", "Execution mode: 'build', 'sys-enforce', 'cap-enforce'")
-	flag.StringVar(&config.ModuleManifest, "manifest", "", "Path to the go.mod manifest file")
 	flag.Parse()
 
-	if config.BinaryPath == "" || config.ModuleManifest == "" {
-		log.Fatal("Both -binary and -manifest flags are required")
+	if config.BinaryPath == "" || config.Mode == "" {
+		log.Fatal("both -binary and -mode flags are required")
 	}
 
 	modes := map[string]func(RuntimeConfig){
@@ -59,8 +58,9 @@ func main() {
 func runBuildMode(args RuntimeConfig) {
 	traceStore := make(map[string]*syscallfilter.TraceEntry)
 	syscalls := make(map[string]map[int]bool)
+	syscallStacks := make(map[string]map[int]map[uint32]bool)
 
-	setupAndRun(BUILD_MODE, args.BinaryPath, args.ModuleManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+	setupAndRun(BUILD_MODE, args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
 		execComm := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
 		resolvedStackTrace := binanalyzer.ResolveStackTrace(stackTrace)
 		_, callerPackage, _ := stackanalyzer.FindCallerPackage(resolvedStackTrace)
@@ -76,10 +76,11 @@ func runBuildMode(args RuntimeConfig) {
 
 			if execPath != "" {
 				traceStore[execPath] = &syscallfilter.TraceEntry{
-					Type:     "binary",
-					Path:     execPath,
-					Syscalls: []int{},
-					Parent:   callerPackage,
+					Type:         "binary",
+					Path:         execPath,
+					Syscalls:     []int{},
+					SyscallPaths: make(map[string][]uint32),
+					Parent:       callerPackage,
 				}
 
 				if callerPackage != "" {
@@ -103,6 +104,7 @@ func runBuildMode(args RuntimeConfig) {
 					Type:             "dep",
 					Path:             callerPackage,
 					Syscalls:         []int{},
+					SyscallPaths:     make(map[string][]uint32),
 					ExecutedBinaries: []string{},
 				}
 			}
@@ -117,6 +119,27 @@ func runBuildMode(args RuntimeConfig) {
 				uniqueSyscalls = append(uniqueSyscalls, syscall)
 			}
 			traceStore[callerPackage].Syscalls = uniqueSyscalls
+
+			/* NEW CODE*/
+			if _, ok := syscallStacks[callerPackage]; !ok {
+				syscallStacks[callerPackage] = make(map[int]map[uint32]bool)
+			}
+
+			syscallID := int(event.SyscallId)
+			if _, ok := syscallStacks[callerPackage][syscallID]; !ok {
+				syscallStacks[callerPackage][syscallID] = make(map[uint32]bool)
+			}
+			stackID := event.StackTraceId
+			syscallStacks[callerPackage][syscallID][stackID] = true
+
+			for syscallID, stackIDSet := range syscallStacks[callerPackage] {
+				syscallIDStr := strconv.Itoa(syscallID)
+				stackIDList := make([]uint32, 0, len(stackIDSet))
+				for id := range stackIDSet {
+					stackIDList = append(stackIDList, id)
+				}
+				traceStore[callerPackage].SyscallPaths[syscallIDStr] = stackIDList
+			}
 
 		} else if entry, exists := traceStore[execComm]; exists {
 
@@ -159,7 +182,7 @@ func runSysEnforceMode(args RuntimeConfig) {
 	f := createLogFile("unauthorized_syscalls.log")
 	defer f.Close()
 
-	setupAndRun(ENFORCE_MODE, args.BinaryPath, args.ModuleManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+	setupAndRun(ENFORCE_MODE, args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
 
 		sysID := int(event.SyscallId)
 		execComm := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
@@ -175,16 +198,11 @@ func runSysEnforceMode(args RuntimeConfig) {
 			logEvent(event, stackTrace, "package")
 
 			if !traceStore.HasEntry(callerPackage) {
-				if stackanalyzer.IsPackageInCache(callerPackage) {
-					log.Printf("Warning: package %s not in allowlist but found in Go manifest", callerPackage)
-					return
-				} else {
-					KillUnauthorized(event.Pid,
-						fmt.Sprintf("Deny: package %s not in allowlist for syscall %d",
-							callerPackage, sysID),
-						f)
-					return
-				}
+				KillUnauthorized(event.Pid,
+					fmt.Sprintf("Deny: package %s not in allowlist for syscall %d",
+						callerPackage, sysID),
+					f)
+				return
 			}
 
 			if !traceStore.SyscallAllowed(callerPackage, sysID) {
@@ -247,7 +265,7 @@ func runCapabilityEnforceMode(args RuntimeConfig) {
 	f := createLogFile("unauthorized_capabilities.log")
 	defer f.Close()
 
-	setupAndRun(ENFORCE_MODE, args.BinaryPath, args.ModuleManifest, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+	setupAndRun(ENFORCE_MODE, args.BinaryPath, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
 		execComm := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
 		resolvedStackTrace := binanalyzer.ResolveStackTrace(stackTrace)
 		_, callerPackage, _ := stackanalyzer.FindCallerPackage(resolvedStackTrace)
@@ -266,16 +284,12 @@ func runCapabilityEnforceMode(args RuntimeConfig) {
 			logEvent(event, stackTrace, "package")
 
 			if !traceStore.HasEntry(callerPackage) {
-				if stackanalyzer.IsPackageInCache(callerPackage) {
-					log.Printf("Warning: package %s not in allowlist but found in Go manifest", callerPackage)
-					return
-				} else {
-					KillUnauthorized(event.Pid,
-						fmt.Sprintf("Deny: package %s not in allowlist for capability %s",
-							callerPackage, capability),
-						f)
-					return
-				}
+				KillUnauthorized(event.Pid,
+					fmt.Sprintf("Deny: package %s not in allowlist for capability %s",
+						callerPackage, capability),
+					f)
+				return
+
 			}
 
 			if exists && !traceStore.CapabilityAllowed(callerPackage, capability) {

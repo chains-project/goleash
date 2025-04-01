@@ -14,12 +14,13 @@ type SyscallAllowlist struct {
 type TraceStore map[string]*TraceEntry
 
 type TraceEntry struct {
-	Type             string   `json:"type"`
-	Path             string   `json:"path"`
-	Syscalls         []int    `json:"syscalls"`
-	Capabilities     []string `json:"capabilities"`
-	ExecutedBinaries []string `json:"executed_binaries"`
-	Parent           string   `json:"caller_dep,omitempty"`
+	Type             string              `json:"type"`
+	Path             string              `json:"path"`
+	Syscalls         []int               `json:"syscalls"`
+	Capabilities     []string            `json:"capabilities"`
+	ExecutedBinaries []string            `json:"executed_binaries"`
+	SyscallPaths     map[string][]uint32 `json:"syscalls_paths,omitempty"`
+	Parent           string              `json:"caller_dep,omitempty"`
 }
 
 func LoadTraceStore() (TraceStore, error) {

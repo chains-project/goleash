@@ -1,27 +1,39 @@
 .PHONY: all clean build cap-enforce sys-enforce
 
-TARGET ?= testExec
-TARGET_DIR ?= ../testPkgs/testExec
-BINARY ?= $(TARGET_DIR)/$(TARGET)
-MANIFEST ?= $(TARGET_DIR)/go.mod
+# Functional test: testExec
+#TARGET_NAME ?= testExec
+#BINARY ?= ../testPkgs/testExec/testExec
+
+# Experiment 1: frps
+#TARGET_NAME ?= frps
+#BINARY ?= ../exp1/frp/target/bin/$(TARGET_NAME)
+
+# Experiment 1: geth
+#TARGET_NAME ?= geth
+#BINARY ?= ../exp1/go-ethereum/$(TARGET_NAME)
+
+# Experiment 1: etcd
+#TARGET_NAME ?= etcd
+#BINARY ?= ../exp1/etcd/target/bin/$(TARGET_NAME)
+
+# Malicious Behaviors
+TARGET_NAME ?= testMalicious
+BINARY ?= ../exp1/testMalicious/target/$(TARGET_NAME)
 
 all: bpf_loader
 
 bpf_loader: main.go
-	TARGET_CMD=$(TARGET) go generate
+	TARGET_CMD=$(TARGET_NAME) go generate
 	go build -o bpf_loader
 
-trace:
-	sudo ./bpf_loader -binary $(BINARY) -manifest $(MANIFEST) -mode trace
-
 build:
-	sudo ./bpf_loader -binary $(BINARY) -manifest $(MANIFEST) -mode build
+	sudo ./bpf_loader -binary $(BINARY) -mode build
 
 cap-enforce:
-	sudo ./bpf_loader -binary $(BINARY) -manifest $(MANIFEST) -mode cap-enforce
+	sudo ./bpf_loader -binary $(BINARY) -mode cap-enforce
 
 sys-enforce:
-	sudo ./bpf_loader -binary $(BINARY) -manifest $(MANIFEST) -mode sys-enforce
+	sudo ./bpf_loader -binary $(BINARY) -mode sys-enforce
 
 clean:
 	rm -f bpf_loader

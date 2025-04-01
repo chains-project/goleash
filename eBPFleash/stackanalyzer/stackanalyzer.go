@@ -2,11 +2,9 @@ package stackanalyzer
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/cilium/ebpf"
-	"golang.org/x/mod/modfile"
 )
 
 const (
@@ -14,36 +12,25 @@ const (
 )
 
 var thirdPartyPrefixes = []string{
-	"github.com/", "gitlab.com/", "bitbucket.org/",
-}
-
-type ImportedPackages struct {
-	packages []string
-}
-
-var ImportedPackagesCache *ImportedPackages
-
-func LoadModuleCache(modManifest string) error {
-	content, err := os.ReadFile(modManifest)
-	if err != nil {
-		return err
-	}
-
-	f, err := modfile.Parse(modManifest, content, nil)
-	if err != nil {
-		return err
-	}
-
-	ImportedPackagesCache = &ImportedPackages{
-		packages: make([]string, 0, len(f.Require)),
-	}
-
-	for _, req := range f.Require {
-		fmt.Printf("Caching module: %s %s\n", req.Mod.Path, req.Mod.Version)
-		ImportedPackagesCache.packages = append(ImportedPackagesCache.packages, req.Mod.Path)
-	}
-
-	return nil
+	//"golang.org",        // trusted
+	//"google.golang.org", // trusted
+	"golang.design/x/clipboard",
+	"golang.org",
+	"4d63.com",
+	"git.sr.ht",
+	"github.com",
+	"gitlab.com",
+	"go-simpler.org",
+	"go.etcd.io",
+	"go.opentelemetry.io",
+	"go.uber.org",
+	"gonum.org",
+	"gopkg.in",
+	"gotest.tools",
+	"honnef.co",
+	"k8s.io",
+	"mvdan.cc",
+	"sigs.k8s.io",
 }
 
 func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {
@@ -72,31 +59,89 @@ func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {
 	return result, nil
 }
 
-func FindCallerPackage(stackTrace []string) (bool, string, string) {
+/*
 
+func FindCallerPackage(stackTrace []string, thirdPartyPrefixes []string) (bool, string, string) {
 	for _, frame := range stackTrace {
 		for _, prefix := range thirdPartyPrefixes {
 			if strings.HasPrefix(frame, prefix) {
-				lastDotIndex := strings.LastIndex(frame, ".")
-				if lastDotIndex != -1 {
-					return true, frame[:lastDotIndex], frame[lastDotIndex+1:]
+				// Find the last slash
+				slashIdx := strings.LastIndex(frame, "/")
+				if slashIdx < 0 {
+					// No slash => everything is package
+					return true, frame, ""
 				}
-				return true, frame, ""
+
+				// Split into packagePath / finalComponent
+				packagePath := frame[:slashIdx]
+				finalComponent := frame[slashIdx+1:]
+
+				// Find the first dot in the final component
+				dotIdx := strings.Index(finalComponent, ".")
+				if dotIdx < 0 {
+					// No dot => entire frame is package
+					return true, frame, ""
+				}
+
+				// The package extends into the final component up to the dot
+				return true,
+					packagePath + "/" + finalComponent[:dotIdx],
+					finalComponent[dotIdx+1:]
 			}
 		}
 	}
 	return false, "", ""
-}
+}*/
 
-func IsPackageInCache(pkgName string) bool {
-	if ImportedPackagesCache == nil {
-		return false
-	}
+func FindCallerPackage(stackTrace []string) (bool, string, string) {
+	for _, frame := range stackTrace {
+		// Check if this frame is from a third-party package
+		for _, prefix := range thirdPartyPrefixes {
+			if strings.HasPrefix(frame, prefix) {
+				// For Go package paths, we need to handle both dots and slashes
+				// The function name always comes after the last component of the package path
 
-	for _, cachedPkg := range ImportedPackagesCache.packages {
-		if strings.HasPrefix(pkgName, cachedPkg+"/") {
-			return true
+				// First, find the last slash in the frame
+				lastSlashIndex := strings.LastIndex(frame, "/")
+
+				var packagePath string
+				var functionPart string
+
+				if lastSlashIndex != -1 {
+					// If there's a slash, everything before the last slash is definitely part of the package path
+					// The last component might be either part of the package or the start of the function name
+					beforeLastSlash := frame[:lastSlashIndex]
+					afterLastSlash := frame[lastSlashIndex+1:]
+
+					// Check if there's a dot in the last component
+					dotInLastComponent := strings.Index(afterLastSlash, ".")
+
+					if dotInLastComponent != -1 {
+						// The package path extends to the first dot in the last component
+						packagePath = beforeLastSlash + "/" + afterLastSlash[:dotInLastComponent]
+						functionPart = afterLastSlash[dotInLastComponent+1:]
+					} else {
+						// No dot in the last component, the whole frame is the package path
+						packagePath = frame
+						functionPart = ""
+					}
+				} else {
+					// No slash in the frame, use the first dot as the separator between package and function
+					firstDotIndex := strings.Index(frame, ".")
+
+					if firstDotIndex != -1 {
+						packagePath = frame[:firstDotIndex]
+						functionPart = frame[firstDotIndex+1:]
+					} else {
+						// No dot either, the whole frame is the package path
+						packagePath = frame
+						functionPart = ""
+					}
+				}
+
+				return true, packagePath, functionPart
+			}
 		}
 	}
-	return false
+	return false, "", ""
 }
