@@ -69,7 +69,8 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 		fmt.Println(color.BlackString("%s", callerPackage))
 		fmt.Print(color.GreenString("Caller Function: "))
 		fmt.Println(color.BlackString("%s", callerFunction))
-		fmt.Print(color.GreenString("Stack Trace: \n"))
+		fmt.Print(color.GreenString("Stack Trace "))
+		fmt.Print(color.GreenString("(ID %d):\n", event.StackTraceId))
 		for _, frame := range resolvedStackTrace {
 			fmt.Println(color.BlackString("%s", frame))
 		}
@@ -79,7 +80,8 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 		fmt.Println(color.BlackString("EXT_BIN"))
 		fmt.Print(color.GreenString("Caller Command: "))
 		fmt.Println(color.BlackString("%s", ProcessName))
-		fmt.Print(color.GreenString("Stack Trace: \n"))
+		fmt.Print(color.GreenString("Stack Trace "))
+		fmt.Print(color.GreenString("(ID %d):\n", event.StackTraceId))
 		for _, frame := range resolvedStackTrace {
 			fmt.Println(color.BlackString("%s", frame))
 		}
@@ -142,14 +144,9 @@ func loadEBPF(mode int) (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 	return &objs, rd, tps, nil
 }
 
-func setupAndRun(mode int, binaryPath string, modManifestPath string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
+func setupAndRun(mode int, binaryPath string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
 	if err := binanalyzer.LoadBinarySymbolsCache(binaryPath); err != nil {
 		log.Fatalf("Populating symbol cache: %v", err)
-	}
-
-	// Load module cache
-	if err := stackanalyzer.LoadModuleCache(modManifestPath); err != nil {
-		log.Fatalf("Loading module cache: %v", err)
 	}
 
 	objs, rd, tps, err := loadEBPF(mode)
@@ -190,6 +187,7 @@ func setupAndRun(mode int, binaryPath string, modManifestPath string, processEve
 				}
 
 				stackTrace, err := stackanalyzer.GetStackTrace(objs.Stacktraces, event.StackTraceId)
+
 				if err != nil {
 					log.Printf("Getting stack trace: %s", err)
 					continue
