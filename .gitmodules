@@ -1,3 +1,0 @@
-[submodule "coredns"]
-	path = coredns
-	url = git@github.com:chains-project/coredns.git
