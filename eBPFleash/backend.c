@@ -1,76 +1,10 @@
 // +build ignore
 
-#include "vmlinux.h"
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_core_read.h>
-#include <sys/syscall.h>
+#include "include/trace.bpf.h"
 
-
-#ifndef TARGET_CMD
-#define TARGET_CMD "default_comm"
-#endif
-
-#define PROCESS_NAME_SIZE 100
-#define PATH_SIZE 256
-#define MAX_STACK_DEPTH 32
-
-#define EVENT_SYS_ENTER 0
-#define EVENT_SYS_EXIT 1
+#define STRING_KIND 24
 
 char __license[] SEC("license") = "Dual MIT/GPL";
-
-static char target_process_name[PROCESS_NAME_SIZE] = TARGET_CMD;
-
-// Represents a system call event with process and execution details
-struct event {
-    u32 pid;
-    u64 syscall_id;
-    u8  process_name[PROCESS_NAME_SIZE];
-    u32 stack_trace_id;
-    char exec_path[PATH_SIZE];
-    char exec_args[PATH_SIZE];
-    int exec_fd;      
-    u8 event_type;
-};
-
-// Ring buffer for event transmission
-struct {
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 1 << 24);
-} events SEC(".maps");
-
-// Stack trace storage
-struct {
-    __uint(type, BPF_MAP_TYPE_STACK_TRACE);
-    __uint(key_size, sizeof(u32));
-    __uint(value_size, MAX_STACK_DEPTH * sizeof(u64));
-    __uint(max_entries, 10000);
-} stacktraces SEC(".maps");
-
-// Target process tracking
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 10000);
-    __type(key, u32);
-    __type(value, u8);
-} tracked_pids_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 10000);
-    __type(key, u32);
-    __type(value, char[PATH_SIZE]);
-} temp_exec_paths SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 10240);
-    __type(key, u32);
-    __type(value, u32);
-} temp_stack_ids SEC(".maps");
-
-
-const struct event *unused __attribute__((unused));
 
 // Helper function to compare strings
 static __always_inline int strcmp(const char *s1, const char *s2, int max_size) {
@@ -89,6 +23,7 @@ static __always_inline int strcmp(const char *s1, const char *s2, int max_size) 
     return (unsigned char)(*s1) - (unsigned char)(*s2);
 }
 */
+
 SEC("tracepoint/raw_syscalls/sys_enter")
 // SEC("tracepoint/syscalls/sys_enter_*")
 int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
@@ -128,7 +63,7 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
         e->stack_trace_id = (stack_id >= 0) ? stack_id : 0;
 
         // Store exec path for execve and execveat syscalls
-        if (ctx->id == 59 || ctx->id == 322) {
+        if (ctx->id == SYS_execve || ctx->id == SYS_execveat) {
             int stack_id = bpf_get_stackid(ctx, &stacktraces, BPF_F_USER_STACK);
             if (stack_id >= 0) {
                 bpf_map_update_elem(&temp_stack_ids, &current_pid, &stack_id, BPF_ANY);
@@ -156,7 +91,7 @@ int trace_syscall_exit(struct trace_event_raw_sys_exit *ctx) {
         return 0;
     }
 
-    if (ctx->id != 59 && ctx->id != 322) {
+    if (ctx->id != SYS_execve && ctx->id != SYS_execve) {
         return 0;
     }
 
@@ -202,6 +137,4 @@ int BPF_PROG(hook_sys_execve) {
       
 }
 */
-
-
 

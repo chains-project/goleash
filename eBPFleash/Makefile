@@ -13,12 +13,12 @@
 #BINARY ?= ../exp1/go-ethereum/$(TARGET_NAME)
 
 # Experiment 1: etcd
-#TARGET_NAME ?= etcd
-#BINARY ?= ../exp1/etcd/target/bin/$(TARGET_NAME)
+TARGET_NAME ?= etcd
+BINARY ?= ../exp1/etcd/target/bin/$(TARGET_NAME)
 
 # Malicious Behaviors
-TARGET_NAME ?= testMalicious
-BINARY ?= ../exp1/testMalicious/target/$(TARGET_NAME)
+#TARGET_NAME ?= testMalicious
+#BINARY ?= ../exp1/testMalicious/target/$(TARGET_NAME)
 
 all: bpf_loader
 

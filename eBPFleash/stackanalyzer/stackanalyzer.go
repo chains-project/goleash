@@ -14,23 +14,23 @@ const (
 var thirdPartyPrefixes = []string{
 	//"golang.org",        // trusted
 	//"google.golang.org", // trusted
-	"golang.design/x/clipboard",
-	"golang.org",
+	"github.com",
+	"go.uber.org",
+	"gopkg.in",
+	"k8s.io",
+	"sigs.k8s.io",
+	"rsc.io",
 	"4d63.com",
 	"git.sr.ht",
-	"github.com",
 	"gitlab.com",
 	"go-simpler.org",
 	"go.etcd.io",
 	"go.opentelemetry.io",
-	"go.uber.org",
 	"gonum.org",
-	"gopkg.in",
 	"gotest.tools",
 	"honnef.co",
 	"k8s.io",
 	"mvdan.cc",
-	"sigs.k8s.io",
 }
 
 func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {

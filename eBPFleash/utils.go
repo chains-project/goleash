@@ -98,6 +98,16 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 
 }
 
+const (
+	// The path to the ELF binary containing the function to trace.
+	// On some distributions, the 'readline' function is provided by a
+	// dynamically-linked library, so the path of the library will need
+	// to be specified instead, e.g. /usr/lib/libreadline.so.8.
+	// Use `ldd /bin/bash` to find these paths.
+	binPath = "/home/carmine/projects/workspace_goleash/goleash/exp1/testMalicious/target/testMalicious"
+	symbol  = "runtime.newproc"
+)
+
 func loadEBPF(mode int) (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 	// Allow the current process to lock memory for eBPF resources.
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -114,17 +124,14 @@ func loadEBPF(mode int) (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 	var tps []*link.Link
 	tpEnter, err := link.Tracepoint("raw_syscalls", "sys_enter", objs.TraceSyscallEnter, nil)
 	if err != nil {
-		objs.Close()
 		return nil, nil, nil, fmt.Errorf("opening sys_enter tracepoint: %w", err)
 	}
 	tps = append(tps, &tpEnter)
 
-	var tpExit link.Link
 	if mode == BUILD_MODE {
+		var tpExit link.Link
 		tpExit, err := link.Tracepoint("raw_syscalls", "sys_exit", objs.TraceSyscallExit, nil)
 		if err != nil {
-			tpEnter.Close()
-			objs.Close()
 			return nil, nil, nil, fmt.Errorf("opening sys_exit tracepoint: %w", err)
 		}
 		tps = append(tps, &tpExit)
@@ -133,11 +140,6 @@ func loadEBPF(mode int) (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 	// Open a ringbuf reader from userspace RINGBUF map described in the eBPF C program.
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
-		tpEnter.Close()
-		if mode == BUILD_MODE {
-			tpExit.Close()
-		}
-		objs.Close()
 		return nil, nil, nil, fmt.Errorf("opening ringbuf reader: %w", err)
 	}
 
