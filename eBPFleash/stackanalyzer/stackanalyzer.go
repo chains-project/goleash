@@ -31,6 +31,10 @@ var thirdPartyPrefixes = []string{
 	"honnef.co",
 	"k8s.io",
 	"mvdan.cc",
+	"bitbucket.org",
+	"cloud.google.com",
+	"go.tmz.dev",
+	"lukechampine.com",
 }
 
 func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {

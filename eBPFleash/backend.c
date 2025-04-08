@@ -2,8 +2,6 @@
 
 #include "include/trace.bpf.h"
 
-#define STRING_KIND 24
-
 char __license[] SEC("license") = "Dual MIT/GPL";
 
 // Helper function to compare strings
@@ -24,6 +22,52 @@ static __always_inline int strcmp(const char *s1, const char *s2, int max_size) 
 }
 */
 
+
+#define MAX_PROCESS_NAMES 10
+
+// List of targets to track (testMalicious)
+/*
+static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
+    "testMalicious",
+};
+*/
+
+// List of targets to track (KUBERENTES)
+/*
+static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
+    "kube-apiserver",
+    "kube-controller-manager",
+    "kube-scheduler",
+    "kube-proxy",
+    "kubelet",
+    "kubectl",
+    "kubeadm",
+};
+*/
+
+// List of targets to track (FRP)
+/*
+static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
+    "frpc",
+    "frps",
+};
+*/
+
+// List of targets to track (ETCD)
+/*
+static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
+    "etcd",
+    "etcdctl",
+    "etcdutl",
+};
+*/
+
+// List of targets to track (GETH)
+static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
+    "geth",
+};
+
+
 SEC("tracepoint/raw_syscalls/sys_enter")
 // SEC("tracepoint/syscalls/sys_enter_*")
 int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
@@ -37,6 +81,7 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
         bpf_get_current_comm(&current_process, sizeof(current_process));
 
         // If current process matches target process, add to tracking
+        /*
         if (strcmp(current_process, target_process_name, sizeof(target_process_name)) == 0) {
             u32 dummy_value = 1;
             bpf_map_update_elem(&tracked_pids_map, &current_pid, &dummy_value, BPF_ANY);
@@ -45,6 +90,22 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
         } else {
             return 0; // Early return for non-matching processes
         }
+            */
+        // Iterate through the static list of target process names
+        for (int i = 0; i < MAX_PROCESS_NAMES; i++) {
+            if (strcmp(current_process, target_process_names[i], sizeof(target_process_names[i])) == 0) {
+                u32 dummy_value = 1;
+                bpf_map_update_elem(&tracked_pids_map, &current_pid, &dummy_value, BPF_ANY);
+                bpf_printk("Added to tracking: %s (PID: %d)", current_process, current_pid);
+                should_track = true;
+                break; // Exit loop once a match is found
+            }
+        }
+
+        if (!should_track) {
+            return 0; // Early return for non-matching processes
+        }
+
     }
     else {
         should_track = true; // Already tracked, proceed with event creation

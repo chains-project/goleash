@@ -46,7 +46,7 @@ func WarningAuthorized(pid uint32, msg string, f *os.File) {
 
 func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 
-	resolvedStackTrace := binanalyzer.ResolveStackTrace(stackTrace)
+	resolvedStackTrace := binanalyzer.ResolveStackTrace(unix.ByteSliceToString(event.ProcessName[:]), stackTrace)
 	_, callerPackage, callerFunction := stackanalyzer.FindCallerPackage(resolvedStackTrace)
 
 	// Get capability associated with the syscall
@@ -146,8 +146,8 @@ func loadEBPF(mode int) (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 	return &objs, rd, tps, nil
 }
 
-func setupAndRun(mode int, binaryPath string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
-	if err := binanalyzer.LoadBinarySymbolsCache(binaryPath); err != nil {
+func setupAndRun(mode int, binaryPaths []string, processEvent func(ebpfEvent, []uint64, *ebpfObjects)) {
+	if err := binanalyzer.LoadBinarySymbolsCache(binaryPaths); err != nil {
 		log.Fatalf("Populating symbol cache: %v", err)
 	}
 
@@ -164,7 +164,11 @@ func setupAndRun(mode int, binaryPath string, processEvent func(ebpfEvent, []uin
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
 
-	log.Println("Tracking syscalls...")
+	log.Println("\nTracking syscalls")
+	log.Println("List of binaries being tracked...")
+	for _, path := range binaryPaths {
+		fmt.Println(path)
+	}
 
 	go func() {
 		var event ebpfEvent
