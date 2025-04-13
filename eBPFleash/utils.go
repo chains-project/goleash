@@ -195,7 +195,7 @@ func setupAndRun(mode int, binaryPaths []string, processEvent func(ebpfEvent, []
 				stackTrace, err := stackanalyzer.GetStackTrace(objs.Stacktraces, event.StackTraceId)
 
 				if err != nil {
-					log.Printf("Getting stack trace: %s", err)
+					// log.Printf("Getting stack trace: %s", err)
 					continue
 				}
 				processEvent(event, stackTrace, objs)

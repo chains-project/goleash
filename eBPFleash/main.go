@@ -200,7 +200,7 @@ func runSysEnforceMode(args RuntimeConfig) {
 
 		if callerPackage != "" {
 			// CASE A: Syscall from a Go package
-			logEvent(event, stackTrace, "package")
+			// logEvent(event, stackTrace, "package")
 
 			if !traceStore.HasEntry(callerPackage) {
 				KillUnauthorized(event.Pid,
@@ -223,7 +223,7 @@ func runSysEnforceMode(args RuntimeConfig) {
 
 		} else if callerPackage == "" && execComm != originalComm {
 			// CASE B: Syscall from a binary
-			logEvent(event, stackTrace, "binary")
+			// logEvent(event, stackTrace, "binary")
 
 			if !traceStore.HasEntry(execComm) {
 				KillUnauthorized(event.Pid,
@@ -246,7 +246,7 @@ func runSysEnforceMode(args RuntimeConfig) {
 
 		} else if callerPackage == "" && execComm == originalComm {
 			// CASE C: Syscall from a runtime / std libraries / local packages
-			logEvent(event, stackTrace, "runtime")
+			// logEvent(event, stackTrace, "runtime")
 
 			// We assume that the syscall is allowed (trusted) if we reach this point
 			return
@@ -286,7 +286,7 @@ func runCapabilityEnforceMode(args RuntimeConfig) {
 
 		if callerPackage != "" {
 			// CASE A: Capability from a Go package
-			logEvent(event, stackTrace, "package")
+			// logEvent(event, stackTrace, "package")
 
 			if !traceStore.HasEntry(callerPackage) {
 				KillUnauthorized(event.Pid,
@@ -309,7 +309,7 @@ func runCapabilityEnforceMode(args RuntimeConfig) {
 
 		} else if callerPackage == "" && execComm != originalComm {
 			// CASE B: Capability from a binary
-			logEvent(event, stackTrace, "binary")
+			// logEvent(event, stackTrace, "binary")
 
 			if !traceStore.HasEntry(execComm) {
 				KillUnauthorized(event.Pid,
@@ -331,7 +331,7 @@ func runCapabilityEnforceMode(args RuntimeConfig) {
 
 		} else if callerPackage == "" && execComm == originalComm {
 			// CASE C: Capability from runtime / std libraries / local packages
-			logEvent(event, stackTrace, "runtime")
+			// logEvent(event, stackTrace, "runtime")
 
 			// We assume that the syscall is allowed (trusted) if we reach this point
 			return
@@ -342,6 +342,6 @@ func runCapabilityEnforceMode(args RuntimeConfig) {
 				f)
 		}
 
-		logEvent(event, stackTrace, "none")
+		// logEvent(event, stackTrace, "none")
 	})
 }

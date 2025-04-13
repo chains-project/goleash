@@ -3,7 +3,7 @@
 TARGET_NAME ?= default
 
 # Functional test: testExec
-#BINARIES ?= ../testPkgs/testExec/testExec
+# BINARIES ?= ../testPkgs/testExec/testExec
 
 # Malicious Behaviors
 #BINARIES ?= ../exp1/testMalicious/target/testMalicious
@@ -13,7 +13,10 @@ TARGET_NAME ?= default
 # 			../exp1/frp/target/bin/frpc
 
 # Experiment 1: geth
-BINARIES ?= ../exp1/go-ethereum/geth
+#BINARIES ?= ../exp1/go-ethereum/geth
+
+# Experiment 1: coredns
+#BINARIES ?= ../exp1/coredns/target/coredns
 
 # Experiment 1: etcd
 #BINARIES ?= ../exp1/etcd/target/bin/etcd \
@@ -21,13 +24,13 @@ BINARIES ?= ../exp1/go-ethereum/geth
 #			../exp1/etcd/target/bin/etcdutl
 
 # Experiment 1: kubernetes
-#BINARIES ?= ../exp1/kuberneter/taget/_output/local/bin/linux/amd64/kube-apiserver \
-#            ../exp1/kuberneter/taget/_output/local/bin/linux/amd64/kube-controller-manager \
-#            ../exp1/kuberneter/taget/_output/local/bin/linux/amd64/kube-scheduler \
-#            ../exp1/kuberneter/taget/_output/local/bin/linux/amd64/kube-proxy \
-#            ../exp1/kuberneter/taget/_output/local/bin/linux/amd64/kubelet \
-#            ../exp1/kuberneter/taget/_output/local/bin/linux/amd64/kubeclt \
-#            ../exp1/kuberneter/taget/_output/local/bin/linux/amd64/kubeadm
+BINARIES ?= ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-apiserver \
+            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-controller-manager \
+            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-scheduler \
+            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-proxy \
+            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubelet \
+            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubectl \
+            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubeadm
 
 space := $(empty) $(empty)
 comma := ,

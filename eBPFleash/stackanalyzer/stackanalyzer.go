@@ -35,6 +35,7 @@ var thirdPartyPrefixes = []string{
 	"cloud.google.com",
 	"go.tmz.dev",
 	"lukechampine.com",
+	"tideland.dev",
 }
 
 func GetStackTrace(stacktraces *ebpf.Map, stackID uint32) ([]uint64, error) {
@@ -99,6 +100,10 @@ func FindCallerPackage(stackTrace []string, thirdPartyPrefixes []string) (bool, 
 
 func FindCallerPackage(stackTrace []string) (bool, string, string) {
 	for _, frame := range stackTrace {
+
+		// Strip the local prefix if present
+		frame = strings.TrimPrefix(frame, "local.")
+
 		// Check if this frame is from a third-party package
 		for _, prefix := range thirdPartyPrefixes {
 			if strings.HasPrefix(frame, prefix) {
