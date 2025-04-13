@@ -13,17 +13,7 @@ static __always_inline int strcmp(const char *s1, const char *s2, int max_size) 
     return 0;
 }
 
-/*int my_strcmp(const char *s1, const char *s2) {
-    while (*s1 && (*s1 == *s2)) {
-        s1++;
-        s2++;
-    }
-    return (unsigned char)(*s1) - (unsigned char)(*s2);
-}
-*/
-
-
-#define MAX_PROCESS_NAMES 10
+// TODO: take the list of targets from a map shared with the user space
 
 // List of targets to track (testMalicious)
 /*
@@ -33,7 +23,6 @@ static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
 */
 
 // List of targets to track (KUBERENTES)
-/*
 static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
     "kube-apiserver",
     "kube-controller-manager",
@@ -43,7 +32,7 @@ static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
     "kubectl",
     "kubeadm",
 };
-*/
+
 
 // List of targets to track (FRP)
 /*
@@ -63,14 +52,27 @@ static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
 */
 
 // List of targets to track (GETH)
+/*
 static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
     "geth",
 };
+*/
 
+// List of targets to track (COREDNS)
+/*
+static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
+    "coredns",
+};
+*/
 
 SEC("tracepoint/raw_syscalls/sys_enter")
 // SEC("tracepoint/syscalls/sys_enter_*")
 int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
+
+    // Capture start time
+    u64 start_time = bpf_ktime_get_ns(); 
+
+
 	u32 current_pid = bpf_get_current_pid_tgid() >> 32;
 	u32 *is_tracked = bpf_map_lookup_elem(&tracked_pids_map, &current_pid);
     bool should_track = false;
@@ -80,17 +82,6 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
         char current_process[PROCESS_NAME_SIZE];
         bpf_get_current_comm(&current_process, sizeof(current_process));
 
-        // If current process matches target process, add to tracking
-        /*
-        if (strcmp(current_process, target_process_name, sizeof(target_process_name)) == 0) {
-            u32 dummy_value = 1;
-            bpf_map_update_elem(&tracked_pids_map, &current_pid, &dummy_value, BPF_ANY);
-            bpf_printk("Added to tracking: %s (PID: %d)", current_process, current_pid);
-            should_track = true;
-        } else {
-            return 0; // Early return for non-matching processes
-        }
-            */
         // Iterate through the static list of target process names
         for (int i = 0; i < MAX_PROCESS_NAMES; i++) {
             if (strcmp(current_process, target_process_names[i], sizeof(target_process_names[i])) == 0) {
@@ -139,6 +130,11 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
         bpf_ringbuf_submit(e, 0);
     }
 
+    // Capture end time
+    u64 end_time = bpf_ktime_get_ns(); // Capture end time
+    u64 latency = end_time - start_time; // Calculate latency
+    bpf_printk("Syscall latency: %llu ns (PID: %d, Syscall ID: %d)", latency, current_pid, ctx->id);
+    
     return 0;
 }
 
@@ -184,7 +180,7 @@ int trace_syscall_exit(struct trace_event_raw_sys_exit *ctx) {
 }
 
 
-    /*
+/* example of sending a sigterm to the traced process
 SEC("fentry/__x64_sys_execve")
 int BPF_PROG(hook_sys_execve) {
 

@@ -11,6 +11,7 @@
 #define TARGET_CMD "default_comm"
 #endif
 
+#define MAX_PROCESS_NAMES 10
 #define PROCESS_NAME_SIZE 100
 #define PATH_SIZE 256
 #define MAX_STACK_DEPTH 32

@@ -1,7 +1,3 @@
-github.com/carminecesarano/mal_dependency v0.1.31 h1:x6b37ZYBJNKtlrn/97Sjt/ZbtSKmOPcLskFOUHhMY84=
-github.com/carminecesarano/mal_dependency v0.1.31/go.mod h1:ymGHrG9k77YTK8d8bqjhehfXKxaT1Js0udaB0aPBcRw=
-github.com/carminecesarano/mal_dependency v0.1.35 h1:PQWTl7+a8EPDg7I6rQo5VLnJlztDVAZoJVj9F9E3xHk=
-github.com/carminecesarano/mal_dependency v0.1.35/go.mod h1:ymGHrG9k77YTK8d8bqjhehfXKxaT1Js0udaB0aPBcRw=
 github.com/cilium/ebpf v0.17.1 h1:G8mzU81R2JA1nE5/8SRubzqvBMmAmri2VL8BIZPWvV0=
 github.com/cilium/ebpf v0.17.1/go.mod h1:vay2FaYSmIlv3r8dNACd4mW/OCaZLJKJOo+IHBvCIO8=
 github.com/fatih/color v1.18.0 h1:S8gINlzdQ840/4pfAwic/ZE0djQEH3wM94VfqLTZcOM=
