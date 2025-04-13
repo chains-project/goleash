@@ -9,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chains-project/goleash/eBPFleash/binanalyzer"
-	"github.com/chains-project/goleash/eBPFleash/stackanalyzer"
-	"github.com/chains-project/goleash/eBPFleash/syscallfilter"
+	"github.com/chains-project/goleash/goleash/binanalyzer"
+	"github.com/chains-project/goleash/goleash/stackanalyzer"
+	"github.com/chains-project/goleash/goleash/syscallfilter"
 	"golang.org/x/sys/unix"
 )
 

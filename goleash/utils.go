@@ -10,9 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/chains-project/goleash/eBPFleash/binanalyzer"
-	"github.com/chains-project/goleash/eBPFleash/stackanalyzer"
-	"github.com/chains-project/goleash/eBPFleash/syscallfilter"
+	"github.com/chains-project/goleash/goleash/binanalyzer"
+	"github.com/chains-project/goleash/goleash/stackanalyzer"
+	"github.com/chains-project/goleash/goleash/syscallfilter"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
