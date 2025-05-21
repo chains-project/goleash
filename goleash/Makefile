@@ -1,57 +1,38 @@
-.PHONY: all clean build cap-enforce sys-enforce
+.PHONY: all clean build cap-enforce sys-enforce generate-config
 
-TARGET_NAME ?= default
+# Variables
+CONFIG_FILE := config.toml
+HEADER_FILE := include/target_names.h
+BPF_LOADER := bpf_loader
+BINARIES := $(shell go run scripts/read_config.go $(CONFIG_FILE) $(HEADER_FILE))
 
-# Functional test: testExec
-# BINARIES ?= ../testPkgs/testExec/testExec
+# Default target
+all: generate-config $(BPF_LOADER)
 
-# Malicious Behaviors
-#BINARIES ?= ../exp1/testMalicious/target/testMalicious
+# Read binaries from config.toml
+generate-config:
+	@echo "Processing $(CONFIG_FILE) to generate $(HEADER_FILE)..."
+	@mkdir -p $(dir $(HEADER_FILE))
+	@go run scripts/read_config.go $(CONFIG_FILE) $(HEADER_FILE)
 
-# Experiment 1: frps
-#BINARIES ?= ../exp1/frp/target/bin/frps \
-# 			../exp1/frp/target/bin/frpc
+# Build the bpf_loader binary
+$(BPF_LOADER): main.go
+	@echo "Building $(BPF_LOADER)..."
+	go generate
+	go build -o $(BPF_LOADER)
 
-# Experiment 1: geth
-#BINARIES ?= ../exp1/go-ethereum/geth
+# Build modes
+build: all
+	sudo ./$(BPF_LOADER) -binary "$(BINARIES)" -mode build
 
-# Experiment 1: coredns
-#BINARIES ?= ../exp1/coredns/target/coredns
+cap-enforce: all
+	sudo ./$(BPF_LOADER) -binary "$(BINARIES)" -mode cap-enforce
 
-# Experiment 1: etcd
-#BINARIES ?= ../exp1/etcd/target/bin/etcd \
-#			../exp1/etcd/target/bin/etcdctl \
-#			../exp1/etcd/target/bin/etcdutl
+sys-enforce: all
+	sudo ./$(BPF_LOADER) -binary "$(BINARIES)" -mode sys-enforce
 
-# Experiment 1: kubernetes
-BINARIES ?= ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-apiserver \
-            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-controller-manager \
-            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-scheduler \
-            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-proxy \
-            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubelet \
-            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubectl \
-            ../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubeadm
-
-space := $(empty) $(empty)
-comma := ,
-BINARY_ARGS := $(subst $(space),$(comma),$(BINARIES))
-
-all: bpf_loader
-
-bpf_loader: main.go
-	TARGET_CMD=$(TARGET_NAME) go generate
-	go build -o bpf_loader
-
-build:
-	sudo ./bpf_loader -binary $(BINARY_ARGS) -mode build
-
-cap-enforce:
-	sudo ./bpf_loader -binary $(BINARY_ARGS) -mode cap-enforce
-
-sys-enforce:
-	sudo ./bpf_loader -binary $(BINARY_ARGS) -mode sys-enforce
-
+# Clean up generated files
 clean:
-	rm -f bpf_loader
-	rm -r *.o
-	rm ebpf_*
+	@echo "Cleaning up..."
+	rm -f $(HEADER_FILE) $(BPF_LOADER)
+	rm -rf *.o ebpf_*

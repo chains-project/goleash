@@ -1,6 +1,7 @@
 // +build ignore
 
 #include "include/trace.bpf.h"
+#include "include/target_names.h"
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
@@ -13,64 +14,14 @@ static __always_inline int strcmp(const char *s1, const char *s2, int max_size) 
     return 0;
 }
 
-// TODO: take the list of targets from a map shared with the user space
-
-// List of targets to track (testMalicious)
-/*
-static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
-    "testMalicious",
-};
-*/
-
-// List of targets to track (KUBERENTES)
-static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
-    "kube-apiserver",
-    "kube-controller-manager",
-    "kube-scheduler",
-    "kube-proxy",
-    "kubelet",
-    "kubectl",
-    "kubeadm",
-};
-
-
-// List of targets to track (FRP)
-/*
-static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
-    "frpc",
-    "frps",
-};
-*/
-
-// List of targets to track (ETCD)
-/*
-static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
-    "etcd",
-    "etcdctl",
-    "etcdutl",
-};
-*/
-
-// List of targets to track (GETH)
-/*
-static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
-    "geth",
-};
-*/
-
-// List of targets to track (COREDNS)
-/*
-static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = {
-    "coredns",
-};
-*/
+static const char target_process_names[MAX_PROCESS_NAMES][PROCESS_NAME_SIZE] = TARGET_PROCESS_NAMES;
 
 SEC("tracepoint/raw_syscalls/sys_enter")
 // SEC("tracepoint/syscalls/sys_enter_*")
 int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
 
     // Capture start time
-    u64 start_time = bpf_ktime_get_ns(); 
+//    u64 start_time = bpf_ktime_get_ns(); 
 
 
 	u32 current_pid = bpf_get_current_pid_tgid() >> 32;
@@ -131,9 +82,9 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
     }
 
     // Capture end time
-    u64 end_time = bpf_ktime_get_ns(); // Capture end time
-    u64 latency = end_time - start_time; // Calculate latency
-    bpf_printk("Syscall latency: %llu ns (PID: %d, Syscall ID: %d)", latency, current_pid, ctx->id);
+  //  u64 end_time = bpf_ktime_get_ns(); // Capture end time
+  //  u64 latency = end_time - start_time; // Calculate latency
+  //  bpf_printk("Syscall latency: %llu ns (PID: %d, Syscall ID: %d)", latency, current_pid, ctx->id);
     
     return 0;
 }
@@ -191,7 +142,6 @@ int BPF_PROG(hook_sys_execve) {
  
     bpf_send_signal(9);
     bpf_override_return((struct pt_regs *)ctx, -EPERM);
-      
 }
 */
 

@@ -15,7 +15,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event -cflags "-DTARGET_CMD='\"${TARGET_CMD}\"'" ebpf backend.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event ebpf backend.c
 
 type RuntimeConfig struct {
 	BinaryPaths []string
@@ -38,10 +38,12 @@ func main() {
 	var binaryPaths string
 
 	flag.StringVar(&binaryPaths, "binary", "", "Comma-separated list of paths to binaries for syscall tracking")
-	flag.StringVar(&config.Mode, "mode", "enforce", "Execution mode: 'build', 'sys-enforce', 'cap-enforce'")
+	flag.StringVar(&config.Mode, "mode", "build", "Execution mode: 'build', 'sys-enforce', 'cap-enforce'")
 	flag.Parse()
 
 	config.BinaryPaths = strings.Split(binaryPaths, ",")
+
+	fmt.Println("Binary paths:", config.BinaryPaths)
 
 	if len(config.BinaryPaths) == 0 || config.Mode == "" {
 		log.Fatal("both -binary and -mode flags are required")
@@ -178,7 +180,7 @@ func runBuildMode(args RuntimeConfig) {
 }
 
 func runSysEnforceMode(args RuntimeConfig) {
-	var originalComm string
+
 	traceStore, err := syscallfilter.LoadTraceStore()
 	if err != nil {
 		log.Fatalf("loading syscall allowlist: %v", err)
@@ -193,10 +195,6 @@ func runSysEnforceMode(args RuntimeConfig) {
 		execComm := unix.ByteSliceToString(event.ProcessName[:])
 		resolvedStackTrace := binanalyzer.ResolveStackTrace(execComm, stackTrace)
 		_, callerPackage, _ := stackanalyzer.FindCallerPackage(resolvedStackTrace)
-
-		if originalComm == "" {
-			originalComm = execComm
-		}
 
 		if callerPackage != "" {
 			// CASE A: Syscall from a Go package
@@ -221,7 +219,7 @@ func runSysEnforceMode(args RuntimeConfig) {
 			// Allowed package + allowed syscall
 			return
 
-		} else if callerPackage == "" && execComm != originalComm {
+		} else if _, exists := traceStore[execComm]; exists {
 			// CASE B: Syscall from a binary
 			// logEvent(event, stackTrace, "binary")
 
@@ -244,7 +242,7 @@ func runSysEnforceMode(args RuntimeConfig) {
 			// Allowed binary + allowed syscall
 			return
 
-		} else if callerPackage == "" && execComm == originalComm {
+		} else if callerPackage == "" {
 			// CASE C: Syscall from a runtime / std libraries / local packages
 			// logEvent(event, stackTrace, "runtime")
 
@@ -260,6 +258,7 @@ func runSysEnforceMode(args RuntimeConfig) {
 	})
 }
 
+/*
 func runCapabilityEnforceMode(args RuntimeConfig) {
 	var originalComm string
 	traceStore, err := syscallfilter.LoadTraceStore()
@@ -330,6 +329,89 @@ func runCapabilityEnforceMode(args RuntimeConfig) {
 			return
 
 		} else if callerPackage == "" && execComm == originalComm {
+			// CASE C: Capability from runtime / std libraries / local packages
+			// logEvent(event, stackTrace, "runtime")
+
+			// We assume that the syscall is allowed (trusted) if we reach this point
+			return
+
+		} else {
+			KillUnauthorized(event.Pid,
+				fmt.Sprintf("Deny: syscall %d. Unrecognized capability event.", event.SyscallId),
+				f)
+		}
+
+		// logEvent(event, stackTrace, "none")
+	})
+}
+*/
+
+func runCapabilityEnforceMode(args RuntimeConfig) {
+
+	traceStore, err := syscallfilter.LoadTraceStore()
+	if err != nil {
+		log.Fatalf("loading capability allowlist: %v", err)
+	}
+
+	f := createLogFile("unauthorized_capabilities.log")
+	defer f.Close()
+
+	setupAndRun(ENFORCE_MODE, args.BinaryPaths, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
+		execComm := unix.ByteSliceToString(event.ProcessName[:])
+		resolvedStackTrace := binanalyzer.ResolveStackTrace(execComm, stackTrace)
+		_, callerPackage, _ := stackanalyzer.FindCallerPackage(resolvedStackTrace)
+		capability, exists := syscallfilter.GetCapabilityForSyscall(int(event.SyscallId))
+
+		if event.EventType == EventSysExit {
+			fmt.Printf("Exit Event: %d\n", event.SyscallId)
+		}
+
+		if callerPackage != "" {
+			// CASE A: Capability from a Go package
+			// logEvent(event, stackTrace, "package")
+
+			if !traceStore.HasEntry(callerPackage) {
+				KillUnauthorized(event.Pid,
+					fmt.Sprintf("Deny: package %s not in allowlist for capability %s",
+						callerPackage, capability),
+					f)
+				return
+
+			}
+
+			if exists && !traceStore.CapabilityAllowed(callerPackage, capability) {
+				KillUnauthorized(event.Pid,
+					fmt.Sprintf("Deny: capability %s (syscall %d) from package %s",
+						capability, event.SyscallId, callerPackage),
+					f)
+			}
+
+			// Allowed package + allowed capability
+			return
+
+		} else if _, exists := traceStore[execComm]; exists {
+			// CASE B: Capability from a binary
+			// logEvent(event, stackTrace, "binary")
+
+			if !traceStore.HasEntry(execComm) {
+				KillUnauthorized(event.Pid,
+					fmt.Sprintf("Deny: binary %q not in allowlist for capability %s",
+						execComm, capability),
+					f)
+				return
+			}
+
+			if exists && !traceStore.CapabilityAllowed(execComm, capability) {
+				KillUnauthorized(event.Pid,
+					fmt.Sprintf("Deny: capability %s (syscall %d) from binary %s",
+						capability, event.SyscallId, execComm),
+					f)
+			}
+
+			// Allowed binary + allowed syscall
+			return
+
+		} else if callerPackage == "" {
 			// CASE C: Capability from runtime / std libraries / local packages
 			// logEvent(event, stackTrace, "runtime")
 
