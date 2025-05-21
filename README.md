@@ -70,7 +70,7 @@ cd goleash
 make
 ```
 
-### Run Profilnig and Enforcement
+### Run Profiling and Enforcement
 Run FRP's end-to-end tests while GoLeash monitors execution to build a policy.
 
 First, run GoLeash in the analysis mode. 
