@@ -1,90 +1,99 @@
 # GoLeash <img src="logo.jpg" width="45" height="30" alt="Logo" style="vertical-align: middle;"> 
-Runtime enforcement of software supply chain capabilities in Go
 
-# Runnable example
-Run a Go program invoking some denied capability, with goleash runtime enforcement attached. 
+GoSurf is a eBPF-based runtime policy enforcement tool designed to defend Go applications against software supply chain attacks. It enforces the principle of least privilege at the package level, identifying and blocking unauthorized or malicious behavior introduced via compromised dependencies. 
 
+GoLeash monitors system calls at runtime to:
+- Detect when Go packages use system capabilities they shouldn't (e.g., making network connections, modifying files).
+- Mitigate the impact of malicious or overprivileged third-party dependencies.
+- Remain effective even under advanced code obfuscation techniques. 
+
+Modes of Operations
+- **Analysis Mode**: Automatically profiles legitimate runtime behavior by observing system calls and stack traces to generate fine-grained, per-package allowlists.
+- **Enforcement Mode**: At runtime, validates syscalls against the previously generated policies, blocking  logging violations.
+
+
+See the paper: [GoLeash: Mitigating Golang Software Supply Chain Attacks
+with Runtime Policy Enforcement](https://arxiv.org/pdf/2505.11016)
+
+
+## Requirements
+- llvm
+- clang
+- libbpf-dev
+
+## Runnable example: FRP (Fast Reverse Proxy)
+We provide a runnable example of GoLeash in action, using FRP (Fast Reverse Proxy), a reverse proxy written in Go. This example demonstrates how to profile, generate, and enforce package-level capability policies against FRP's ```frpc``` (client) and ```frps``` (server) binaries.
+
+### Setup the target application
+
+First, clone the repository:
 ```bash
-cd examples/example_unrestrict
+git clone https://github.com/fatedier/frp.git
 ```
 
-First, generate the hashes for allowed invocations of capabilities, for the *trusted* initial version of the program. 
+GoLeash uses Go symbol information for stack resolution. To enable this:
+- In the FRP ```Makefile```, remove ```-ldflags "$(LDFLAGS)"``` from the compilation rule. 
+- Or more generally, remove ```-w -s``` flags, which strip debug information.
 
+Still in the Makefile, set 
 ```bash
-make all-hash
+CGO_ENABLED=1
 ```
 
-Execute the trusted version of the program.
+Finally, compile both server and client binaries:
 ```bash
-make all
-```
-
-Then, add a new denied capability invocation to the program. 
-```bash
-sed -i '27,31s/^[[:space:]]*\/\/[[:space:]]*TestReadFile()/TestReadFile()/' dependencyC/dep.go
-```
-
-Execute the compromised version of the program, with the same previously generated hashes.
-```bash
-make all
-```
-
-
-# Syscall tracing
-This tool allows you to track syscalls for a specified binary using eBPF.
-
-## Prerequisites
--
-
-## Building the Tracer
-
-1. Navigate to the `track_syscalls` folder and build the tracer
-```bash
-cd track_syscalls
+cd frp
 make
 ```
 
-## Testing with CoreDNS
-
-To demonstrate the syscall tracking capabilities, we'll use CoreDNS as an example.
-
-### Compiling CoreDNS
-
-1. Navigate to the CoreDNS folder and compile CoreDNS using the provided script:
-```bash
-./build.sh
-```
-This will generate the coreDNS binary to run later.
-
-### Generate an allowlist for the CoreDNS Syscalls
-
-2. Navigate back to the `track_syscalls` folder and run the syscall tracker (with root privileges), pointing it to the CoreDNS binary:
-```bash
-sudo ./bpf_loader -binary /binary_path -mod-manifest /go.mod -mode build
-```
-
-Replace `/binary_path` and `/go.mod` with the actual path to the binary and go manifest of the application you want to monitor.
+Optional: You can increase test parallelism in ```/hack/run-e2e.sh``` by modifying the ```concurrency``` parameter.
 
 
-### Start CoreDNS and send a test request
-3.  In a new terminal window run coreDNS
-```bash
-./coredns/run.sh
+### Configure and Compile GoLeash
+Edit the ```config.toml``` file in GoLeash to tell it which binaries to monitor: 
+
+```toml
+[targets]
+binaries = [
+  "frpc",
+  "frps"
+]
+binary_paths = [
+  "..frp/bin/frps",
+  "..frp/target/bin/frpc"
+]
 ```
 
-CoreDNS will start with a default configuration.
-
-4. To trigger some operations to track, you can send a request to coreDNS
-
+Compile GoLeash 
 ```bash
-./make_request.sh
+cd goleash
+make
 ```
 
-This script will send a DNS query to the running CoreDNS instance.
+### Run Profilnig and Enforcement
+Run FRP's end-to-end tests while GoLeash monitors execution to build a policy.
 
-4. Observe the syscall tracking output in the terminal where you ran `bpf_loader`.
+First, run GoLeash in the analysis mode. 
+```bash
+make build
+```
 
-You should now see the syscalls triggered by CoreDNS in response to the DNS query. Closing the tracker with CTRL+C, the allowlist will be saved. 
+Then, in another shell, run the end-to-end tests:
+```bash
+cd frp
+make e2e
+```
+You can run this multiple times to improve coverage in the policy. When done, stop goleash (CTRL+C) and the policy will be saved in the current directory (```trace\store.json```).
+
+
+To simulate a violation, manually remove a capability from ```tracestore.json``` for any package. Then launch GoLeash in enforcement mode, when executing again e2e test. 
+```bash
+cd goleash
+make cap-enforce
+```
+
+
+**Note**: For more runnable examples, see ```execute_target.md```
 
 
 
