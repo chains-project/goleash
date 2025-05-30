@@ -1,6 +1,6 @@
 # GoLeash <img src="logo.jpg" width="45" height="30" alt="Logo" style="vertical-align: middle;"> 
 
-GoSurf is a eBPF-based runtime policy enforcement tool designed to defend Go applications against software supply chain attacks. It enforces the principle of least privilege at the package level, identifying and blocking unauthorized or malicious behavior introduced via compromised dependencies. 
+GoLeash is a eBPF-based runtime policy enforcement tool designed to defend Go applications against software supply chain attacks. It enforces the principle of least privilege at the package level, identifying and blocking unauthorized or malicious behavior introduced via compromised dependencies. 
 
 GoLeash monitors system calls at runtime to:
 - Detect when Go packages use system capabilities they shouldn't (e.g., making network connections, modifying files).
