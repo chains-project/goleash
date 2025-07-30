@@ -20,6 +20,7 @@ with Runtime Policy Enforcement](https://arxiv.org/pdf/2505.11016)
 - llvm
 - clang
 - libbpf-dev
+- gcc-multilib
 
 ## Runnable example: FRP (Fast Reverse Proxy)
 We provide a runnable example of GoLeash in action, using FRP (Fast Reverse Proxy), a reverse proxy written in Go. This example demonstrates how to profile, generate, and enforce package-level capability policies against FRP's ```frpc``` (client) and ```frps``` (server) binaries.
