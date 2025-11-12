@@ -1,6 +1,6 @@
 # GoLeash <img src="logo.jpg" width="45" height="30" alt="Logo" style="vertical-align: middle;"> 
 
-GoSurf is a eBPF-based runtime policy enforcement tool designed to defend Go applications against software supply chain attacks. It enforces the principle of least privilege at the package level, identifying and blocking unauthorized or malicious behavior introduced via compromised dependencies. 
+GoLeash is a eBPF-based runtime policy enforcement tool designed to defend Go applications against software supply chain attacks. It enforces the principle of least privilege at the package level, identifying and blocking unauthorized or malicious behavior introduced via compromised dependencies. 
 
 GoLeash monitors system calls at runtime to:
 - Detect when Go packages use system capabilities they shouldn't (e.g., making network connections, modifying files).
@@ -20,6 +20,7 @@ with Runtime Policy Enforcement](https://arxiv.org/pdf/2505.11016)
 - llvm
 - clang
 - libbpf-dev
+- gcc-multilib
 
 ## Runnable example: FRP (Fast Reverse Proxy)
 We provide a runnable example of GoLeash in action, using FRP (Fast Reverse Proxy), a reverse proxy written in Go. This example demonstrates how to profile, generate, and enforce package-level capability policies against FRP's ```frpc``` (client) and ```frps``` (server) binaries.
@@ -70,7 +71,7 @@ cd goleash
 make
 ```
 
-### Run Profilnig and Enforcement
+### Run Profiling and Enforcement
 Run FRP's end-to-end tests while GoLeash monitors execution to build a policy.
 
 First, run GoLeash in the analysis mode. 
