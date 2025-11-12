@@ -2,14 +2,14 @@
 
 # Target binaries to monitor
 [targets]
-binaries = [
-  "frpc",
-  "frps"
-]
-binary_paths = [
-  "../exp1/frp/target/bin/frps",
-  "../exp1/frp/target/bin/frpc"
-]
+#binaries = [
+#  "frpc",
+#  "frps"
+#]
+#binary_paths = [
+#  "../exp1/frp/target/bin/frps",
+#  "../exp1/frp/target/bin/frpc"
+#]
 
 #binaries = [
 #  "geth"
@@ -37,25 +37,31 @@ binary_paths = [
 #  "../exp1/etcd/target/bin/etcdutl"
 #]
 
-#binaries = [
-#  "kube-apiserver"
-#  "kube-controller-manager"
-#  "kube-scheduler"
-#  "kube-proxy"
-#  "kubelet"
-#  "kubectl"
-#  "kubeadm"
-#]
+binaries = [
+  "kube-apiserver",
+  "kube-controller",
+  "kube-scheduler",
+  "kube-proxy",
+  "kubelet",
+  "kubectl"
+]
 #binary_paths = [
-#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-apiserver"
-#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-controller-manager"
-#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-scheduler"
-#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-proxy"
-#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubelet"
-#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubectl"
-#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubeadm"
+#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kube-apiserver",
+#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kube-controller-manager",
+#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kube-scheduler",
+#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kube-proxy",
+#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kubelet",
+#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kubectl"
 #]
 
+binary_paths = [
+  "/usr/bin/kube-apiserver",
+  "/usr/bin/kube-controller",
+  "/usr/bin/kube-scheduler",
+  "/usr/bin/kube-proxy",
+  "/usr/bin/kubelet",
+  "/usr/bin/kubectl"
+]
 #binaries = [
 #  "testExec"
 #]

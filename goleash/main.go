@@ -88,6 +88,7 @@ func runBuildMode(args RuntimeConfig) {
 					Syscalls:     []int{},
 					SyscallPaths: make(map[string][]uint32),
 					Parent:       callerPackage,
+					CallerProcess:	execComm,
 				}
 
 				if callerPackage != "" {
@@ -113,6 +114,7 @@ func runBuildMode(args RuntimeConfig) {
 					Syscalls:         []int{},
 					SyscallPaths:     make(map[string][]uint32),
 					ExecutedBinaries: []string{},
+					CallerProcess:    execComm,
 				}
 			}
 

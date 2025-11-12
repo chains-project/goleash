@@ -21,6 +21,7 @@ type TraceEntry struct {
 	ExecutedBinaries []string            `json:"executed_binaries"`
 	SyscallPaths     map[string][]uint32 `json:"syscalls_paths,omitempty"`
 	Parent           string              `json:"caller_dep,omitempty"`
+	CallerProcess	 string              `json:"caller_process,omitempty"`
 }
 
 func LoadTraceStore() (TraceStore, error) {
