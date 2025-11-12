@@ -83,11 +83,12 @@ func runBuildMode(args RuntimeConfig) {
 
 			if execPath != "" {
 				traceStore[execPath] = &syscallfilter.TraceEntry{
-					Type:         "binary",
-					Path:         execPath,
-					Syscalls:     []int{},
-					SyscallPaths: make(map[string][]uint32),
-					Parent:       callerPackage,
+					Type:          "binary",
+					Path:          execPath,
+					Syscalls:      []int{},
+					SyscallPaths:  make(map[string][]uint32),
+					Parent:        callerPackage,
+					CallerProcess: execComm,
 				}
 
 				if callerPackage != "" {
@@ -113,6 +114,7 @@ func runBuildMode(args RuntimeConfig) {
 					Syscalls:         []int{},
 					SyscallPaths:     make(map[string][]uint32),
 					ExecutedBinaries: []string{},
+					CallerProcess:    execComm,
 				}
 			}
 
