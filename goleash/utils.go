@@ -56,34 +56,34 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 	}
 
 	fmt.Println()
-	fmt.Print(color.BlackString("+------------------------------------------------------------+\n"))
-	fmt.Print(color.BlackString("| Invoked syscall: %d\tPID: %d\tCommand: %s\n", event.SyscallId, event.Pid, unix.ByteSliceToString(event.ProcessName[:])))
-	fmt.Print(color.BlackString("| Required capability: %s\n", capability))
-	fmt.Print(color.BlackString("+------------------------------------------------------------+\n"))
+	fmt.Print(color.WhiteString("+------------------------------------------------------------+\n"))
+	fmt.Print(color.WhiteString("| Invoked syscall: %d\tPID: %d\tCommand: %s\n", event.SyscallId, event.Pid, unix.ByteSliceToString(event.ProcessName[:])))
+	fmt.Print(color.WhiteString("| Required capability: %s\n", capability))
+	fmt.Print(color.WhiteString("+------------------------------------------------------------+\n"))
 
 	switch eventType {
 	case "package":
 		fmt.Print(color.GreenString("Event Type: "))
-		fmt.Println(color.BlackString("GO_PKG"))
+		fmt.Println(color.WhiteString("GO_PKG"))
 		fmt.Print(color.GreenString("Caller Package: "))
-		fmt.Println(color.BlackString("%s", callerPackage))
+		fmt.Println(color.WhiteString("%s", callerPackage))
 		fmt.Print(color.GreenString("Caller Function: "))
-		fmt.Println(color.BlackString("%s", callerFunction))
+		fmt.Println(color.WhiteString("%s", callerFunction))
 		fmt.Print(color.GreenString("Stack Trace "))
 		fmt.Print(color.GreenString("(ID %d):\n", event.StackTraceId))
 		for _, frame := range resolvedStackTrace {
-			fmt.Println(color.BlackString("%s", frame))
+			fmt.Println(color.WhiteString("%s", frame))
 		}
 	case "binary":
 		ProcessName := string(bytes.TrimRight(event.ProcessName[:], "\x00"))
 		fmt.Print(color.GreenString("Event Type: "))
-		fmt.Println(color.BlackString("EXT_BIN"))
+		fmt.Println(color.WhiteString("EXT_BIN"))
 		fmt.Print(color.GreenString("Caller Command: "))
-		fmt.Println(color.BlackString("%s", ProcessName))
+		fmt.Println(color.WhiteString("%s", ProcessName))
 		fmt.Print(color.GreenString("Stack Trace "))
 		fmt.Print(color.GreenString("(ID %d):\n", event.StackTraceId))
 		for _, frame := range resolvedStackTrace {
-			fmt.Println(color.BlackString("%s", frame))
+			fmt.Println(color.WhiteString("%s", frame))
 		}
 	case "runtime":
 		color.Magenta("Event Type: GO_RUNTIME")
@@ -98,17 +98,7 @@ func logEvent(event ebpfEvent, stackTrace []uint64, eventType string) {
 
 }
 
-const (
-	// The path to the ELF binary containing the function to trace.
-	// On some distributions, the 'readline' function is provided by a
-	// dynamically-linked library, so the path of the library will need
-	// to be specified instead, e.g. /usr/lib/libreadline.so.8.
-	// Use `ldd /bin/bash` to find these paths.
-	binPath = "/home/carmine/projects/workspace_goleash/goleash/exp1/testMalicious/target/testMalicious"
-	symbol  = "runtime.newproc"
-)
-
-func loadEBPF(mode int) (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
+func loadEBPF(mode int) (*ebpfObjects, *ringbuf.Reader, []link.Link, error) {
 	// Allow the current process to lock memory for eBPF resources.
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, nil, nil, fmt.Errorf("removing memlock: %w", err)
@@ -120,21 +110,43 @@ func loadEBPF(mode int) (*ebpfObjects, *ringbuf.Reader, []*link.Link, error) {
 		return nil, nil, nil, fmt.Errorf("loading objects: %w", err)
 	}
 
-	// Open two tracepoint and attach the pre-compiled program.
-	var tps []*link.Link
+	var tps []link.Link
+
+	// 1. ATTACH HOT PATH (Syscall Enter)
 	tpEnter, err := link.Tracepoint("raw_syscalls", "sys_enter", objs.TraceSyscallEnter, nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("opening sys_enter tracepoint: %w", err)
 	}
-	tps = append(tps, &tpEnter)
+	tps = append(tps, tpEnter)
 
+	// 2. ATTACH EXEC HOOK (New Process Detection) - CRITICAL FOR TRACKING
+	tpExec, err := link.Tracepoint("sched", "sched_process_exec", objs.TraceExecEvent, nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("opening sched_process_exec tracepoint: %w", err)
+	}
+	tps = append(tps, tpExec)
+
+	// 3. ATTACH FORK HOOK (Worker Detection) - CRITICAL FOR WORKERS
+	tpFork, err := link.Tracepoint("sched", "sched_process_fork", objs.TraceFork, nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("opening sched_process_fork tracepoint: %w", err)
+	}
+	tps = append(tps, tpFork)
+
+	// 4. ATTACH EXIT HOOK (Cleanup)
+	tpProcessExit, err := link.Tracepoint("sched", "sched_process_exit", objs.TraceExit, nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("opening sched_process_exit tracepoint: %w", err)
+	}
+	tps = append(tps, tpProcessExit)
+
+	// 5. ATTACH SYSCALL EXIT (Only in Build Mode)
 	if mode == BUILD_MODE {
-		var tpExit link.Link
 		tpExit, err := link.Tracepoint("raw_syscalls", "sys_exit", objs.TraceSyscallExit, nil)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("opening sys_exit tracepoint: %w", err)
 		}
-		tps = append(tps, &tpExit)
+		tps = append(tps, tpExit)
 	}
 
 	// Open a ringbuf reader from userspace RINGBUF map described in the eBPF C program.
@@ -158,7 +170,7 @@ func setupAndRun(mode int, binaryPaths []string, processEvent func(ebpfEvent, []
 	defer objs.Close()
 	defer rd.Close()
 	for _, tp := range tps {
-		defer (*tp).Close()
+		defer tp.Close()
 	}
 
 	stopChan := make(chan os.Signal, 1)
@@ -169,6 +181,14 @@ func setupAndRun(mode int, binaryPaths []string, processEvent func(ebpfEvent, []
 	for _, path := range binaryPaths {
 		fmt.Println(path)
 	}
+
+	// -------------------------------------------------------------------------
+	// STACK CACHE INITIALIZATION
+	// -------------------------------------------------------------------------
+	// We use this map to avoid querying the Kernel Map (syscall) for every event.
+	// Map Key:   Stack ID (uint32)
+	// Map Value: Slice of Instruction Pointers ([]uint64)
+	stackCache := make(map[uint32][]uint64)
 
 	go func() {
 		var event ebpfEvent
@@ -192,12 +212,31 @@ func setupAndRun(mode int, binaryPaths []string, processEvent func(ebpfEvent, []
 					continue
 				}
 
-				stackTrace, err := stackanalyzer.GetStackTrace(objs.Stacktraces, event.StackTraceId)
+				// -------------------------------------------------------------
+				// CACHED STACK RETRIEVAL
+				// -------------------------------------------------------------
+				var stackTrace []uint64
 
-				if err != nil {
-					// log.Printf("Getting stack trace: %s", err)
-					continue
+				// Only resolve stacks for Syscall Events, not lifecycle events
+				if event.EventType == EventSysEnter || event.EventType == EventSysExit {
+					var ok bool
+					// 1. Check User-Space Cache first
+					if stackTrace, ok = stackCache[event.StackTraceId]; !ok {
+						// 2. Cache Miss: Query the Kernel Map (Expensive Syscall)
+						// Only done once per unique stack ID
+						stackTrace, err = stackanalyzer.GetStackTrace(objs.Stacktraces, event.StackTraceId)
+						if err != nil {
+							// If the stack is missing (e.g., -EFAULT or overwritten),
+							// we pass an empty slice to avoid crashing, but we don't cache the error.
+							// log.Printf("Getting stack trace from kernel: %s", err)
+							stackTrace = []uint64{}
+						} else {
+							// 3. Update Cache
+							stackCache[event.StackTraceId] = stackTrace
+						}
+					}
 				}
+
 				processEvent(event, stackTrace, objs)
 			}
 		}
