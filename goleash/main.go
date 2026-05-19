@@ -16,6 +16,7 @@ import (
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event ebpf backend.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event -cflags "-DGOLEASH_APP_MODE" -type app_seen_key ebpfApp backend.c
 
 type RuntimeConfig struct {
 	BinaryPaths []string
@@ -39,7 +40,7 @@ func main() {
 	var binaryPaths string
 
 	flag.StringVar(&binaryPaths, "binary", "", "Comma-separated list of paths to binaries for syscall tracking")
-	flag.StringVar(&config.Mode, "mode", "build", "Execution mode: 'build', 'sys-enforce', 'cap-enforce'")
+	flag.StringVar(&config.Mode, "mode", "build", "Execution mode: 'build', 'build-app', 'sys-enforce', 'cap-enforce'")
 	flag.Parse()
 
 	config.BinaryPaths = strings.Split(binaryPaths, ",")
@@ -52,6 +53,7 @@ func main() {
 
 	modes := map[string]func(RuntimeConfig){
 		"build":       runBuildMode,
+		"build-app":   runBuildAppMode,
 		"sys-enforce": runSysEnforceMode,
 		"cap-enforce": runCapabilityEnforceMode,
 	}
@@ -59,8 +61,48 @@ func main() {
 	if fn, exists := modes[config.Mode]; exists {
 		fn(config)
 	} else {
-		log.Fatalf("Invalid mode: %s. Use 'build', 'sys-enforce', 'cap-enforce'", config.Mode)
+		log.Fatalf("Invalid mode: %s. Use 'build', 'build-app', 'sys-enforce', 'cap-enforce'", config.Mode)
 	}
+}
+
+// runBuildAppMode is the application-level build variant: no stack capture,
+// no package attribution. The BPF probe (compiled with -DGOLEASH_APP_MODE)
+// emits one event per (tgid, syscall_id) pair; this consumer rolls them up
+// to a per-binary syscall set in app_tracestore.json. Used to measure the
+// minimum eBPF overhead a goleash-like tool can achieve while still
+// capturing every syscall a target binary issues.
+func runBuildAppMode(args RuntimeConfig) {
+	syscalls := make(map[string]map[int]bool)
+
+	setupAndRunApp(args.BinaryPaths, func(event ebpfAppEvent) {
+		execComm := getProcessName(event.Pid)
+		if execComm == "" {
+			return
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		if _, ok := syscalls[execComm]; !ok {
+			syscalls[execComm] = make(map[int]bool)
+		}
+		syscalls[execComm][int(event.SyscallId)] = true
+	})
+
+	out := make(map[string][]int, len(syscalls))
+	for comm, set := range syscalls {
+		ids := make([]int, 0, len(set))
+		for id := range set {
+			ids = append(ids, id)
+		}
+		out[comm] = ids
+	}
+
+	if err := syscallfilter.WriteAppTraceStore(out); err != nil {
+		log.Fatalf("Writing app trace store: %v", err)
+	}
+
+	log.Println("Build-app mode completed. app_tracestore.json created.")
 }
 
 func runBuildMode(args RuntimeConfig) {

@@ -113,8 +113,10 @@ int trace_exit(struct trace_event_raw_sched_process_template *ctx) {
     }
 
     bpf_map_delete_elem(&tracked_pids_map, &tgid);
+#ifndef GOLEASH_APP_MODE
     bpf_map_delete_elem(&temp_stack_ids, &tgid);
     bpf_map_delete_elem(&temp_exec_paths, &tgid);
+#endif
     return 0;
 }
 
@@ -136,6 +138,46 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
         return 0;
 
     long syscall_id = BPF_CORE_READ(ctx, id);
+
+#ifdef GOLEASH_APP_MODE
+    // -----------------------------------------------------------------------
+    // APP-MODE HOT PATH — minimum overhead.
+    // -----------------------------------------------------------------------
+    // No stack capture, no callsite pre-filter, no execve special-casing.
+    // Dedup on (tgid, syscall_id) so each pair is admitted at most once;
+    // every subsequent identical syscall short-circuits at the lookup below.
+    struct app_seen_key ask = {
+        .tgid       = current_pid,
+        .syscall_id = (u32)syscall_id,
+    };
+    if (bpf_map_lookup_elem(&app_seen, &ask))
+        return 0;
+    u8 one = 1;
+    bpf_map_update_elem(&app_seen, &ask, &one, BPF_ANY);
+
+    // Cold path: a (tgid, syscall_id) pair we have not admitted before.
+    {
+        u32 k = 2;
+        u64 *c = bpf_map_lookup_elem(&probe_stats, &k);
+        if (c) __sync_fetch_and_add(c, 1);
+    }
+
+    struct event *e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
+    if (!e) {
+        u32 drop_key = 0;
+        u64 *drops = bpf_map_lookup_elem(&probe_stats, &drop_key);
+        if (drops) __sync_fetch_and_add(drops, 1);
+        return 0;
+    }
+    e->event_type    = EVENT_SYS_ENTER;
+    e->pid           = current_pid;
+    e->syscall_id    = (u64)syscall_id;
+    e->stack_trace_id = 0;   // unused in app-mode
+    e->kernel_ts     = bpf_ktime_get_ns();
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+
+#else  /* package-mode hot path */
 
     // ---- Fix 1b: callsite pre-filter -----------------------------------
     // Read user RIP + RSP from pt_regs — two register reads, no stack walk.
@@ -203,17 +245,6 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
         u64 *fails = bpf_map_lookup_elem(&probe_stats, &fail_key);
         if (fails) __sync_fetch_and_add(fails, 1);
     }
-    
-    // Clean up temp maps
-    bpf_map_delete_elem(&temp_stack_ids, &tgid);
-    bpf_map_delete_elem(&temp_exec_paths, &tgid);
-    return 0;
-}
-
-
-// -----------------------------------------------------------------------------
-// 2. INSTRUMENTATION LOGIC (High Frequency / Hot Path)
-// -----------------------------------------------------------------------------
 
     // Reserve ring buffer and emit event.
     struct event *e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
@@ -251,11 +282,14 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
 
     bpf_ringbuf_submit(e, 0);
     return 0;
+#endif  /* GOLEASH_APP_MODE */
 }
 
 
-
-
+#ifndef GOLEASH_APP_MODE
+// sys_exit is package-mode only: it exists to recover exec_path + stack_id
+// stashed during execve. App-mode does not track spawned binaries, so this
+// handler is omitted from the app-mode .o (loader skips its attach too).
 SEC("tracepoint/raw_syscalls/sys_exit")
 int trace_syscall_exit(struct trace_event_raw_sys_exit *ctx) {
 
@@ -269,8 +303,6 @@ int trace_syscall_exit(struct trace_event_raw_sys_exit *ctx) {
     if (ctx->id != SYS_execve && ctx->id != SYS_execveat) {
         return 0;
     }
-
-    // bpf_printk("DEBUG: Execve EXIT caught for PID %d", pid);
 
     struct event *e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
     if (!e) return 0;
@@ -295,9 +327,10 @@ int trace_syscall_exit(struct trace_event_raw_sys_exit *ctx) {
         bpf_map_delete_elem(&temp_exec_paths, &pid);
     }
 
-    bpf_ringbuf_submit(e, 0);        
+    bpf_ringbuf_submit(e, 0);
     return 0;
 }
+#endif  /* !GOLEASH_APP_MODE */
 
 
 /* example of sending a sigterm to the traced process
