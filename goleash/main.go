@@ -69,6 +69,7 @@ func runBuildMode(args RuntimeConfig) {
 
 	setupAndRun(BUILD_MODE, args.BinaryPaths, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
 		execComm := unix.ByteSliceToString(event.ProcessName[:])
+
 		resolvedStackTrace := binanalyzer.ResolveStackTrace(execComm, stackTrace)
 		_, callerPackage, _ := stackanalyzer.FindCallerPackage(resolvedStackTrace)
 
@@ -105,7 +106,7 @@ func runBuildMode(args RuntimeConfig) {
 		if callerPackage != "" {
 
 			// CASE A: Syscall from a Go package
-			logEvent(event, stackTrace, "package")
+			// logEvent(event, stackTrace, "package")
 
 			if _, exists := traceStore[callerPackage]; !exists {
 				traceStore[callerPackage] = &syscallfilter.TraceEntry{
@@ -129,7 +130,6 @@ func runBuildMode(args RuntimeConfig) {
 			}
 			traceStore[callerPackage].Syscalls = uniqueSyscalls
 
-			/* NEW CODE*/
 			if _, ok := syscallStacks[callerPackage]; !ok {
 				syscallStacks[callerPackage] = make(map[int]map[uint32]bool)
 			}
@@ -138,6 +138,9 @@ func runBuildMode(args RuntimeConfig) {
 			if _, ok := syscallStacks[callerPackage][syscallID]; !ok {
 				syscallStacks[callerPackage][syscallID] = make(map[uint32]bool)
 			}
+
+			// We track the ID here, but the heavy lifting of retrieving the stack
+			// was handled efficiently in setupAndRun via the cache.
 			stackID := event.StackTraceId
 			syscallStacks[callerPackage][syscallID][stackID] = true
 
@@ -153,7 +156,7 @@ func runBuildMode(args RuntimeConfig) {
 		} else if entry, exists := traceStore[execComm]; exists {
 
 			// CASE B: Syscall from a binary
-			logEvent(event, stackTrace, "binary")
+			// logEvent(event, stackTrace, "binary")
 
 			if _, ok := syscalls[execComm]; !ok {
 				syscalls[execComm] = make(map[int]bool)
@@ -169,7 +172,7 @@ func runBuildMode(args RuntimeConfig) {
 		} else {
 
 			// CASE C: Syscall from a runtime / main
-			logEvent(event, stackTrace, "runtime")
+			// logEvent(event, stackTrace, "runtime")
 		}
 
 	})
@@ -259,94 +262,6 @@ func runSysEnforceMode(args RuntimeConfig) {
 
 	})
 }
-
-/*
-func runCapabilityEnforceMode(args RuntimeConfig) {
-	var originalComm string
-	traceStore, err := syscallfilter.LoadTraceStore()
-	if err != nil {
-		log.Fatalf("loading capability allowlist: %v", err)
-	}
-
-	f := createLogFile("unauthorized_capabilities.log")
-	defer f.Close()
-
-	setupAndRun(ENFORCE_MODE, args.BinaryPaths, func(event ebpfEvent, stackTrace []uint64, objs *ebpfObjects) {
-		execComm := unix.ByteSliceToString(event.ProcessName[:])
-		resolvedStackTrace := binanalyzer.ResolveStackTrace(execComm, stackTrace)
-		_, callerPackage, _ := stackanalyzer.FindCallerPackage(resolvedStackTrace)
-		capability, exists := syscallfilter.GetCapabilityForSyscall(int(event.SyscallId))
-
-		if event.EventType == EventSysExit {
-			fmt.Printf("Exit Event: %d\n", event.SyscallId)
-		}
-
-		if originalComm == "" {
-			originalComm = execComm
-		}
-
-		if callerPackage != "" {
-			// CASE A: Capability from a Go package
-			// logEvent(event, stackTrace, "package")
-
-			if !traceStore.HasEntry(callerPackage) {
-				KillUnauthorized(event.Pid,
-					fmt.Sprintf("Deny: package %s not in allowlist for capability %s",
-						callerPackage, capability),
-					f)
-				return
-
-			}
-
-			if exists && !traceStore.CapabilityAllowed(callerPackage, capability) {
-				KillUnauthorized(event.Pid,
-					fmt.Sprintf("Deny: capability %s (syscall %d) from package %s",
-						capability, event.SyscallId, callerPackage),
-					f)
-			}
-
-			// Allowed package + allowed capability
-			return
-
-		} else if callerPackage == "" && execComm != originalComm {
-			// CASE B: Capability from a binary
-			// logEvent(event, stackTrace, "binary")
-
-			if !traceStore.HasEntry(execComm) {
-				KillUnauthorized(event.Pid,
-					fmt.Sprintf("Deny: binary %q not in allowlist for capability %s",
-						execComm, capability),
-					f)
-				return
-			}
-
-			if exists && !traceStore.CapabilityAllowed(execComm, capability) {
-				KillUnauthorized(event.Pid,
-					fmt.Sprintf("Deny: capability %s (syscall %d) from binary %s",
-						capability, event.SyscallId, execComm),
-					f)
-			}
-
-			// Allowed binary + allowed syscall
-			return
-
-		} else if callerPackage == "" && execComm == originalComm {
-			// CASE C: Capability from runtime / std libraries / local packages
-			// logEvent(event, stackTrace, "runtime")
-
-			// We assume that the syscall is allowed (trusted) if we reach this point
-			return
-
-		} else {
-			KillUnauthorized(event.Pid,
-				fmt.Sprintf("Deny: syscall %d. Unrecognized capability event.", event.SyscallId),
-				f)
-		}
-
-		// logEvent(event, stackTrace, "none")
-	})
-}
-*/
 
 func runCapabilityEnforceMode(args RuntimeConfig) {
 
