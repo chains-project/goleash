@@ -21,52 +21,39 @@
 #binaries = [
 #  "coredns"
 #]
-
 #binary_paths = [
 #  "../exp1/coredns/target/coredns"
 #]
 
-#binaries = [
-#  "etcd"
-#  "etcdctl"
-#  "etcdutl"
-#]
-#binary_paths = [
-#  "../exp1/etcd/target/bin/etcd"
-#  "../exp1/etcd/target/bin/etcdctl"
-#  "../exp1/etcd/target/bin/etcdutl"
-#]
-
 binaries = [
-  "kube-apiserver",
-  "kube-controller",
-  "kube-scheduler",
-  "kube-proxy",
-  "kubelet",
-  "kubectl"
+  "etcd",
+  "etcdctl",
+  "etcdutl"
 ]
-#binary_paths = [
-#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kube-apiserver",
-#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kube-controller-manager",
-#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kube-scheduler",
-#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kube-proxy",
-#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kubelet",
-#  "/home/debian/kubefence_workspace/kubernetes/_output/local/go/bin/kubectl"
+binary_paths = [
+  "../exp1/etcd/target/bin/etcd",
+  "../exp1/etcd/target/bin/etcdctl",
+  "../exp1/etcd/target/bin/etcdutl"
+]
+
+#binaries = [
+#  "kube-apiserver",
+#  "kube-controller-manager",
+#  "kube-scheduler",
+#  "kube-proxy",
+#  "kubelet",
+#  "kubectl",
+#  "kubeadm"
 #]
 
-binary_paths = [
-  "/usr/bin/kube-apiserver",
-  "/usr/bin/kube-controller",
-  "/usr/bin/kube-scheduler",
-  "/usr/bin/kube-proxy",
-  "/usr/bin/kubelet",
-  "/usr/bin/kubectl"
-]
-#binaries = [
-#  "testExec"
-#]
 #binary_paths = [
-#  "../testPkgs/testExec/testExec"
+#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-apiserver",
+#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-controller-manager",
+#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-scheduler",
+#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kube-proxy",
+#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubelet",
+#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubectl",
+#  "../exp1/kubernetes/target/_output/local/bin/linux/amd64/kubeadm"
 #]
 
 #binaries = [
@@ -75,15 +62,3 @@ binary_paths = [
 #binary_paths = [
 #  "../exp1/testMalicious/target/testMalicious"
 #]
-
-
-
-
-
-
-
-
-
-
-
-
