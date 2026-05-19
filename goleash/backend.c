@@ -203,6 +203,17 @@ int trace_syscall_enter(struct trace_event_raw_sys_enter *ctx) {
         u64 *fails = bpf_map_lookup_elem(&probe_stats, &fail_key);
         if (fails) __sync_fetch_and_add(fails, 1);
     }
+    
+    // Clean up temp maps
+    bpf_map_delete_elem(&temp_stack_ids, &tgid);
+    bpf_map_delete_elem(&temp_exec_paths, &tgid);
+    return 0;
+}
+
+
+// -----------------------------------------------------------------------------
+// 2. INSTRUMENTATION LOGIC (High Frequency / Hot Path)
+// -----------------------------------------------------------------------------
 
     // Reserve ring buffer and emit event.
     struct event *e = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
@@ -284,7 +295,7 @@ int trace_syscall_exit(struct trace_event_raw_sys_exit *ctx) {
         bpf_map_delete_elem(&temp_exec_paths, &pid);
     }
 
-    bpf_ringbuf_submit(e, 0);
+    bpf_ringbuf_submit(e, 0);        
     return 0;
 }
 
