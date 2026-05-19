@@ -35,4 +35,4 @@ sys-enforce: all
 clean:
 	@echo "Cleaning up..."
 	rm -f $(HEADER_FILE) $(BPF_LOADER)
-	rm -rf *.o ebpf_*
+	rm -rf *.o ebpf_* ebpfapp_*

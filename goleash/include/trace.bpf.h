@@ -83,14 +83,6 @@ struct {
 	__uint(max_entries, 1 << 24);
 } events SEC(".maps");
 
-// Stack trace storage
-struct {
-    __uint(type, BPF_MAP_TYPE_STACK_TRACE);
-    __uint(key_size, sizeof(u32));
-    __uint(value_size, MAX_STACK_DEPTH * sizeof(u64));
-    __uint(max_entries, 10000);
-} stacktraces SEC(".maps");
-
 // Target process tracking.
 //
 // A small BPF_MAP_TYPE_HASH keyed by TGID. We tried BPF_MAP_TYPE_TASK_STORAGE
@@ -106,6 +98,19 @@ struct {
     __type(key, u32);
     __type(value, u8);
 } tracked_pids_map SEC(".maps");
+
+#ifndef GOLEASH_APP_MODE
+// ============================================================================
+// PACKAGE-MODE MAPS — disabled in app-mode (minimum-overhead build).
+// ============================================================================
+
+// Stack trace storage (consumed by bpf_get_stackid → resolved by userspace).
+struct {
+    __uint(type, BPF_MAP_TYPE_STACK_TRACE);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, MAX_STACK_DEPTH * sizeof(u64));
+    __uint(max_entries, 10000);
+} stacktraces SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -166,6 +171,28 @@ struct {
     __type(key, struct callsite_key);
     __type(value, u8);
 } callsite_seen SEC(".maps");
+
+#else  /* GOLEASH_APP_MODE */
+// ============================================================================
+// APP-MODE MAP — single dedup keyed by (tgid, syscall_id).
+// ============================================================================
+// No stack walking, no callsite pre-filter, no execve special-casing.
+// Once a (tgid, syscall_id) pair has been admitted, every subsequent syscall
+// with the same pair short-circuits at the BPF lookup. Userspace coalesces
+// per-binary via its tgid -> comm cache.
+struct app_seen_key {
+    u32 tgid;
+    u32 syscall_id;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
+    __uint(max_entries, 16384);
+    __type(key, struct app_seen_key);
+    __type(value, u8);
+} app_seen SEC(".maps");
+
+#endif  /* GOLEASH_APP_MODE */
 
 const struct event *unused __attribute__((unused));
 
